@@ -9,7 +9,12 @@ if not exist "node_modules" (
   exit /b 1
 )
 
-echo 成長OS を起動しています... http://localhost:3000
+echo 成長OS を起動しています...
+echo.
+echo このパソコンで使う: http://localhost:3000
+echo スマホで使う場合は、この後に表示される「Network:」の後のURLを
+echo 同じWi-Fiに繋いだスマホのブラウザで開いてください。
+echo.
 start "" http://localhost:3000
 call npm run dev
 echo.
