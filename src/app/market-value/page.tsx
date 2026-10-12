@@ -48,6 +48,38 @@ export default async function MarketValuePage() {
         を参照してください。
       </p>
 
+      <Card className="border-slate-200 bg-slate-50">
+        <h2 className="mb-3 text-sm font-semibold text-slate-700">日常の使い方</h2>
+        <ol className="flex flex-col gap-2 text-sm text-slate-700">
+          <li>
+            <span className="font-semibold">① 毎日: </span>
+            <Link href="/diary" className="underline">
+              日記
+            </Link>
+            に業務の出来事を書く。
+          </li>
+          <li>
+            <span className="font-semibold">② 成果が出たら: </span>
+            日記からAIが抽出した実績候補を確認して登録するか、
+            <Link href="/achievements/new" className="underline">
+              実績データベース
+            </Link>
+            に直接登録する。登録時に「関連する市場価値の軸」にタグ付けする(これが5軸のスコアの元になる)。
+          </li>
+          <li>
+            <span className="font-semibold">③ 求人情報を見つけたら: </span>
+            <Link href="/market-value/market-data" className="underline">
+              市場データ
+            </Link>
+            に手動登録する(市場需要軸と、下の「市場要求とのギャップ」に使われる。無くても他の4軸は評価できる)。
+          </li>
+          <li>
+            <span className="font-semibold">④ 週1〜月1回: </span>
+            このページで「現在のスコアを記録する」ボタンを押し、現在地とステージの変化を記録する。
+          </li>
+        </ol>
+      </Card>
+
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <StatTile
