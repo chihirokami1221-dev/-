@@ -46,14 +46,20 @@ async function loadGoals() {
 export default async function GoalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ categoryId?: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   await connection();
-  const { categoryId } = await searchParams;
+  const { tab } = await searchParams;
+  const isDoneTab = tab === "done";
+  const categoryId = isDoneTab ? undefined : tab;
 
   const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
   const allGoals = await loadGoals();
-  const goals = categoryId ? allGoals.filter((g) => g.categoryId === categoryId) : allGoals;
+  // 完了(DONE)した目標は通常のタブから外れ、「完了」タブにのみ表示する。
+  const baseGoals = isDoneTab
+    ? allGoals.filter((g) => g.status === "DONE")
+    : allGoals.filter((g) => g.status !== "DONE");
+  const goals = categoryId ? baseGoals.filter((g) => g.categoryId === categoryId) : baseGoals;
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   // targetMonth = ロードマップの計画ブロックで登録された月(手動登録した目標は期限の月、期限未入力なら登録月)。
@@ -89,7 +95,7 @@ export default async function GoalsPage({
         <Link
           href="/goals"
           className={`rounded-full px-3 py-1 text-sm ${
-            !categoryId ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600"
+            !tab ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600"
           }`}
         >
           すべて
@@ -97,7 +103,7 @@ export default async function GoalsPage({
         {categories.map((c) => (
           <Link
             key={c.id}
-            href={`/goals?categoryId=${c.id}`}
+            href={`/goals?tab=${c.id}`}
             className={`rounded-full px-3 py-1 text-sm ${
               categoryId === c.id ? "text-white" : "border border-slate-300 bg-white text-slate-600"
             }`}
@@ -106,13 +112,23 @@ export default async function GoalsPage({
             {c.label}
           </Link>
         ))}
+        <Link
+          href="/goals?tab=done"
+          className={`rounded-full px-3 py-1 text-sm ${
+            isDoneTab ? "bg-emerald-600 text-white" : "border border-slate-300 bg-white text-slate-600"
+          }`}
+        >
+          完了
+        </Link>
       </div>
 
       <NewGoalForm categories={categories.map((c) => ({ id: c.id, label: c.label }))} />
 
       {sections.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">
-          個別目標がまだありません。ロードマップの各フェーズに「重点行動」を登録すると自動で表示されるほか、上の「+ 目標を追加」からも直接登録できます。
+          {isDoneTab
+            ? "完了した目標はまだありません。"
+            : "個別目標がまだありません。ロードマップの各フェーズに「重点行動」を登録すると自動で表示されるほか、上の「+ 目標を追加」からも直接登録できます。"}
         </p>
       ) : (
         <div className="flex flex-col gap-8">
