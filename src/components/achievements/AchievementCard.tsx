@@ -25,17 +25,12 @@ function formatRevenue(amount: number, currency: string): string {
 }
 
 export function AchievementCard({ item }: { item: AchievementCardItem }) {
-  const isReproducible = item.axisLinks.some((l) => l.axisKey === "reproducibility");
-
   return (
     <Link href={`/achievements/${item.id}/edit`}>
       <div className="rounded-xl border border-slate-200 bg-white p-4 hover:shadow-md">
         <div className="mb-2 flex items-center gap-2">
           <Badge color={item.category.color}>{item.category.label}</Badge>
           <span className="text-xs text-slate-500">{formatJP(new Date(item.date))}</span>
-          {isReproducible && <Badge color="#0d9488">再現性</Badge>}
-          {item.revenueAmount !== null && item.revenueAmount > 0 && <Badge color="#9333ea">収益化</Badge>}
-          {item.thirdPartyFeedback && <Badge color="#2563eb">第三者評価</Badge>}
         </div>
         <h3 className="mb-1 font-semibold text-slate-900">{item.title}</h3>
         {item.result && <p className="mb-2 text-sm text-slate-600">{item.result}</p>}
