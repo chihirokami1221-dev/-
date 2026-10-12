@@ -1,14 +1,17 @@
 @echo off
+chcp 65001 >nul
 cd /d "%~dp0"
 set PATH=C:\Program Files\nodejs;%PATH%
 
 if not exist "node_modules" (
-  echo ����Z�b�g�A�b�v���܂��̂悤�ł��B��� setup.bat ���_�u���N���b�N���Ă��������B
+  echo 初回セットアップがまだのようです。先に setup.bat をダブルクリックしてください。
   pause
   exit /b 1
 )
 
-echo ����OS ���N�����Ă��܂�... (http://localhost:3000)
+echo 成長OS を起動しています... http://localhost:3000
 start "" http://localhost:3000
 call npm run dev
+echo.
+echo npm run dev が終了しました。上にエラーが出ていないか確認してください。
 pause
