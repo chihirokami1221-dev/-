@@ -34,13 +34,6 @@ interface LinkOption {
 
 type RevenueType = "SALES" | "COMPENSATION" | "PROFIT" | "OTHER";
 
-const REVENUE_TYPE_LABEL: Record<RevenueType, string> = {
-  SALES: "売上",
-  COMPENSATION: "報酬",
-  PROFIT: "利益",
-  OTHER: "その他",
-};
-
 interface AchievementFormInitial {
   id?: string;
   title?: string;
@@ -271,34 +264,15 @@ export function AchievementForm({
       </div>
 
       <div className="rounded-xl border border-slate-200 p-3">
-        <div className="mb-2 text-sm font-medium text-slate-700">収益(任意)</div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">収益額(任意・円)</label>
         <p className="mb-2 text-xs text-slate-500">
           実際に発生した金額のみを入力してください(見込み・推定額は入力しない)。未入力と「0円」は区別して記録されます。
         </p>
-        <div className="grid grid-cols-3 gap-2">
-          <Input
-            type="number"
-            placeholder="金額(未入力可)"
-            value={revenueAmount}
-            onChange={(e) => setRevenueAmount(e.target.value)}
-          />
-          <Select value={revenueCurrency} onChange={(e) => setRevenueCurrency(e.target.value)}>
-            <option value="JPY">円</option>
-            <option value="USD">ドル</option>
-          </Select>
-          <Select value={revenueType} onChange={(e) => setRevenueType(e.target.value as RevenueType)}>
-            {(Object.keys(REVENUE_TYPE_LABEL) as RevenueType[]).map((k) => (
-              <option key={k} value={k}>
-                {REVENUE_TYPE_LABEL[k]}
-              </option>
-            ))}
-          </Select>
-        </div>
         <Input
-          className="mt-2"
-          placeholder="対象期間(任意。例: 2026年10月)"
-          value={revenuePeriod}
-          onChange={(e) => setRevenuePeriod(e.target.value)}
+          type="number"
+          placeholder="金額(未入力可)"
+          value={revenueAmount}
+          onChange={(e) => setRevenueAmount(e.target.value)}
         />
       </div>
 
