@@ -17,6 +17,11 @@ if errorlevel 1 (
   exit /b 1
 )
 
+if not exist ".env" (
+  echo [0/3] 設定ファイルを準備中...
+  copy /y ".env.example" ".env" >nul
+)
+
 echo [1/3] 必要なファイルをダウンロード中...(数分かかります)
 call npm install
 if errorlevel 1 (
