@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
+import { SkillChips } from "@/components/ui/SkillChips";
 
 interface MarketDataFormInitial {
   id?: string;
@@ -25,7 +26,13 @@ function toDateInputValue(date?: Date | string): string {
   return new Date(date).toISOString().slice(0, 10);
 }
 
-export function MarketDataForm({ initial }: { initial?: MarketDataFormInitial }) {
+export function MarketDataForm({
+  initial,
+  skillSuggestions = [],
+}: {
+  initial?: MarketDataFormInitial;
+  skillSuggestions?: string[];
+}) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,11 +101,13 @@ export function MarketDataForm({ initial }: { initial?: MarketDataFormInitial })
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">必須スキル・経験(カンマ区切り)</label>
         <Textarea rows={2} value={requiredSkills} onChange={(e) => setRequiredSkills(e.target.value)} />
+        <SkillChips suggestions={skillSuggestions} value={requiredSkills} onChange={setRequiredSkills} />
       </div>
 
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">歓迎スキル(カンマ区切り)</label>
         <Textarea rows={2} value={preferredSkills} onChange={(e) => setPreferredSkills(e.target.value)} />
+        <SkillChips suggestions={skillSuggestions} value={preferredSkills} onChange={setPreferredSkills} />
       </div>
 
       <div>

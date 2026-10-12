@@ -4,10 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { AchievementForm } from "@/components/achievements/AchievementForm";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { BackButton } from "@/components/ui/BackButton";
+import { getSkillSuggestions } from "@/lib/skillSuggestions";
 
 export default async function EditAchievementPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [categories, achievement, individualGoals] = await Promise.all([
+  const [categories, achievement, individualGoals, skillSuggestions] = await Promise.all([
     prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.achievement.findUnique({ where: { id }, include: { axisLinks: true } }),
     prisma.individualGoal.findMany({
@@ -15,6 +16,7 @@ export default async function EditAchievementPage({ params }: { params: Promise<
       select: { id: true, title: true },
       orderBy: { title: "asc" },
     }),
+    getSkillSuggestions(),
   ]);
 
   if (!achievement) notFound();
@@ -28,6 +30,7 @@ export default async function EditAchievementPage({ params }: { params: Promise<
           categories={categories}
           initial={achievement}
           individualGoals={individualGoals}
+          skillSuggestions={skillSuggestions}
         />
       </Suspense>
       <div className="mt-4 flex justify-end">

@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { AxisPicker } from "./AxisPicker";
+import { SkillChips } from "@/components/ui/SkillChips";
 import { ACHIEVEMENT_DRAFT_STORAGE_KEY } from "@/components/diary/ExtractAchievementButton";
 
 interface AchievementDraft {
@@ -65,10 +66,12 @@ export function AchievementForm({
   categories,
   initial,
   individualGoals = [],
+  skillSuggestions = [],
 }: {
   categories: CategoryOption[];
   initial?: AchievementFormInitial;
   individualGoals?: LinkOption[];
+  skillSuggestions?: string[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -232,6 +235,7 @@ export function AchievementForm({
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">使用したスキル(カンマ区切り、複数可)</label>
         <Input required value={skillsUsed} onChange={(e) => setSkillsUsed(e.target.value)} />
+        <SkillChips suggestions={skillSuggestions} value={skillsUsed} onChange={setSkillsUsed} />
       </div>
 
       <div>
