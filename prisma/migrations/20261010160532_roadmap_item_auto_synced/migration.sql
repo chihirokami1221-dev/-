@@ -1,0 +1,1 @@
+﻿ALTER TABLE "RoadmapItem" ADD COLUMN "autoSynced" BOOLEAN NOT NULL DEFAULT false;

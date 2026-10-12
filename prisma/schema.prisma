@@ -1,0 +1,278 @@
+datasource db {
+  // SQLiteはローカル専用。将来Vercel等で公開する場合はTurso(libSQL)や
+  // Postgresへproviderとurlを切り替える(モデル定義はほぼ無改修で移行可能)。
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RoadmapStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  DONE
+}
+
+enum DayOfWeek {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  color     String
+  sortOrder Int      @default(0)
+  longTermPlan String @default("")
+  createdAt DateTime @default(now())
+
+  roadmapItems RoadmapItem[]
+  diaryEntries DiaryEntry[]
+  achievements Achievement[]
+  individualGoals IndividualGoal[]
+  events       Event[]
+}
+
+// 具体的なイベント(会議・撮影・発刊日など)。ロードマップの計画ブロック・行動とは独立して管理し、
+// タイムライン上にピンポイントの日付として◇マークで表示する。
+model Event {
+  id         String   @id @default(cuid())
+  title      String
+  date       DateTime
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  memo       String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([date])
+  @@index([categoryId])
+}
+
+model RoadmapItem {
+  id                 String        @id @default(cuid())
+  title              String
+  // タイトル・期間のみが現在の登録フォームの入力項目。以下は過去のバージョンで入力された詳細情報の名残で、
+  // 既存データ保護のため残しているが、新規作成時は空のままでよい(詳細は重点行動タブで管理する)。
+  content            String        @default("")
+  categoryId         String
+  category           Category      @relation(fields: [categoryId], references: [id])
+  startDate          DateTime?
+  dueDate            DateTime?
+  priority           Priority      @default(MEDIUM)
+  completionCriteria String        @default("")
+  reason             String        @default("")
+  requiredSkills     String
+  status             RoadmapStatus @default(NOT_STARTED)
+  progressPercent    Int           @default(0)
+  autoSynced         Boolean       @default(false)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  weeklyTodoItems WeeklyTodoItem[]
+  keyActions      KeyAction[]
+  individualGoals IndividualGoal[]
+  relatedAchievements Achievement[]
+}
+
+// 重点行動: ロードマップの各フェーズ(RoadmapItem)に紐づく、実行すべき行動。1項目ずつ追加・編集・削除・並び替えできる。
+model KeyAction {
+  id            String   @id @default(cuid())
+  roadmapItemId String
+  roadmapItem   RoadmapItem @relation(fields: [roadmapItemId], references: [id], onDelete: Cascade)
+  title         String
+  note          String   @default("") // 行動の詳細
+  startDate     DateTime?
+  dueDate       DateTime?
+  sortOrder     Int      @default(0)
+  // 削除してもそこから派生した個別目標・実績・Weekly ToDoの履歴を消さないため、物理削除せず論理削除する。
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  individualGoals IndividualGoal[]
+
+  @@index([roadmapItemId])
+}
+
+// 個別目標: 重点行動から対象月ごとに自動生成・同期される目標。自動生成後も自由に手動編集・削除できる。
+model IndividualGoal {
+  id              String        @id @default(cuid())
+  title           String
+  content         String        @default("")
+  targetMonth     DateTime      // その月の1日0時(JSTローカル)で正規化して保存
+  categoryId      String
+  category        Category      @relation(fields: [categoryId], references: [id])
+  roadmapItemId   String?
+  roadmapItem     RoadmapItem?  @relation(fields: [roadmapItemId], references: [id], onDelete: SetNull)
+  keyActionId     String?
+  keyAction       KeyAction?    @relation(fields: [keyActionId], references: [id], onDelete: SetNull)
+  dueDate         DateTime?
+  status          RoadmapStatus @default(NOT_STARTED)
+  priority        Priority      @default(MEDIUM)
+  progressPercent Int           @default(0)
+  // ユーザーがタイトル・内容・期限等を手動編集したらtrueにし、以後の自動同期で上書きしない。
+  manuallyEdited  Boolean       @default(false)
+  // ユーザーが手動削除したらtrueにする論理削除フラグ。同期時に勝手に復活させないためのマーカー。
+  syncDeleted     Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  weeklyTodoItems WeeklyTodoItem[]
+  relatedAchievements Achievement[]
+
+  @@unique([keyActionId, targetMonth])
+  @@index([targetMonth])
+  @@index([roadmapItemId])
+  @@index([categoryId])
+}
+
+model DiaryEntry {
+  id             String   @id @default(cuid())
+  date           DateTime
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id])
+  content        String
+  aiAnalysis     String?
+  aiAnalysisNote String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  extractedAchievements Achievement[]
+
+  @@index([date])
+}
+
+model Achievement {
+  id             String   @id @default(cuid())
+  title          String
+  challenge      String
+  action         String
+  result         String
+  metricValue    String?
+  skillsUsed     String
+  // 自分が担当した範囲(チームの一員としての実績で、担当部分を明確にするため)。
+  role           String   @default("")
+  isReproducible Boolean  @default(false)
+  // 再現性の根拠(同じ手法を別の場面でも再現できた具体的な説明)。チェックだけでは評価に加点しない。
+  reproducibilityNote String @default("")
+  isMonetized    Boolean  @default(false)
+  // 上司・顧客など第三者からの評価コメント。未入力なら「第三者評価」軸の根拠として扱わない。
+  thirdPartyFeedback String @default("")
+  evidenceUrl    String?
+  evidenceNote   String?
+  date           DateTime
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id])
+  // AIが日記から抽出した実績候補から確定登録した場合、元の日記を記録する(どのテキストから来たか追跡し、二重登録の判断材料にする)。
+  sourceDiaryEntryId String?
+  sourceDiaryEntry   DiaryEntry? @relation(fields: [sourceDiaryEntryId], references: [id])
+  relatedRoadmapItemId String?
+  relatedRoadmapItem   RoadmapItem? @relation(fields: [relatedRoadmapItemId], references: [id], onDelete: SetNull)
+  relatedIndividualGoalId String?
+  relatedIndividualGoal   IndividualGoal? @relation(fields: [relatedIndividualGoalId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  axisLinks AchievementAxisLink[]
+
+  @@index([sourceDiaryEntryId])
+  @@index([relatedRoadmapItemId])
+  @@index([relatedIndividualGoalId])
+}
+
+model AchievementAxisLink {
+  id            String      @id @default(cuid())
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  axisKey       String
+
+  @@unique([achievementId, axisKey])
+  @@index([axisKey])
+}
+
+model TodayTask {
+  id        String   @id @default(cuid())
+  date      DateTime
+  content   String
+  isDone    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model WeeklyTodoItem {
+  id            String       @id @default(cuid())
+  weekStart     DateTime
+  dayOfWeek     DayOfWeek    @default(MON)
+  title         String
+  priority      Priority     @default(MEDIUM)
+  isDone        Boolean      @default(false)
+  roadmapItemId String?
+  roadmapItem   RoadmapItem? @relation(fields: [roadmapItemId], references: [id], onDelete: SetNull)
+  individualGoalId String?
+  individualGoal    IndividualGoal? @relation(fields: [individualGoalId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([weekStart])
+  @@index([dayOfWeek])
+  @@index([roadmapItemId])
+  @@index([individualGoalId])
+}
+
+model MarketValueScoreSnapshot {
+  id         String   @id @default(cuid())
+  totalScore Float
+  stageLevel Int
+  // 5軸ごとのスコア・ステータスを記録するJSON(例: {"specialist_skill":{"score":40,"status":"scored"},...})。
+  // 「評価が変化した場合は変更前後の状態・理由・根拠を履歴として保持する」ための実データ。
+  axisScoresJson String @default("{}")
+  // 直前のスナップショットとの差分から自動生成した変化理由の要約(捏造せず、実績件数・証拠の増減のみを記述する)。
+  reasonNote String @default("")
+  achievementCountAtSnapshot Int @default(0)
+  computedAt DateTime @default(now())
+}
+
+// 求人情報など市場データ。自動取得は行わず、ユーザーが確認できた情報のみ手動登録する。
+model MarketDataEntry {
+  id                   String   @id @default(cuid())
+  roleTitle            String
+  requiredSkills       String   @default("")
+  preferredSkills      String   @default("")
+  requiredTrackRecord  String   @default("")
+  compensationRange    String   @default("")
+  sourceUrl            String   @default("")
+  sourceLabel          String   @default("")
+  fetchedAt            DateTime
+  confirmedAt          DateTime
+  note                 String   @default("")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([fetchedAt])
+}
+
+model Memo {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @default("")
+  // 「今日の哲学者の一言」「今日の英単語」「今日のおすすめ本」を自動保存する際の重複防止キー(例: "quote:2026-10-10")。
+  // 手動作成のメモはnullのまま。
+  sourceKey String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,1 @@
+﻿ALTER TABLE "IndividualGoal" ADD COLUMN "priority" TEXT NOT NULL DEFAULT 'MEDIUM';
