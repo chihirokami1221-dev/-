@@ -1,7 +1,14 @@
 @echo off
 cd /d "%~dp0"
 set PATH=C:\Program Files\nodejs;%PATH%
-echo æˆé•·OS ã‚’èµ·å‹•ã—ã¦ã„ã¾ã™... (http://localhost:3000)
+
+if not exist "node_modules" (
+  echo ‰‰ñƒZƒbƒgƒAƒbƒv‚ª‚Ü‚¾‚Ì‚æ‚¤‚Å‚·Bæ‚É setup.bat ‚ğƒ_ƒuƒ‹ƒNƒŠƒbƒN‚µ‚Ä‚­‚¾‚³‚¢B
+  pause
+  exit /b 1
+)
+
+echo ¬’·OS ‚ğ‹N“®‚µ‚Ä‚¢‚Ü‚·... (http://localhost:3000)
 start "" http://localhost:3000
 call npm run dev
 pause
