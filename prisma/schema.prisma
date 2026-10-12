@@ -158,22 +158,33 @@ model DiaryEntry {
   @@index([date])
 }
 
+enum RevenueType {
+  SALES // 売上
+  COMPENSATION // 報酬
+  PROFIT // 利益
+  OTHER // その他
+}
+
 model Achievement {
   id             String   @id @default(cuid())
   title          String
   challenge      String
   action         String
   result         String
+  // 金額を伴わない数値(作業時間削減率など)。収益額は revenueAmount で別管理する。
   metricValue    String?
   skillsUsed     String
   // 自分が担当した範囲(チームの一員としての実績で、担当部分を明確にするため)。
   role           String   @default("")
-  isReproducible Boolean  @default(false)
-  // 再現性の根拠(同じ手法を別の場面でも再現できた具体的な説明)。チェックだけでは評価に加点しない。
-  reproducibilityNote String @default("")
-  isMonetized    Boolean  @default(false)
   // 上司・顧客など第三者からの評価コメント。未入力なら「第三者評価」軸の根拠として扱わない。
   thirdPartyFeedback String @default("")
+  // 収益額(nullは「未入力」、0は「発生なし」として区別する)。再現性・収益化の判定は
+  // チェックボックスではなく、axisLinks(軸タグ)とこの金額の有無で行う。
+  revenueAmount   Float?
+  revenueCurrency String      @default("JPY")
+  revenueType     RevenueType @default(SALES)
+  // 収益の対象期間(任意・自由記述。例: 「2026年10月」「2026年度上期」)。
+  revenuePeriod   String      @default("")
   evidenceUrl    String?
   evidenceNote   String?
   date           DateTime

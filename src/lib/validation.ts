@@ -41,6 +41,8 @@ export const diaryEntrySchema = z.object({
 
 export const diaryEntryUpdateSchema = diaryEntrySchema.partial();
 
+const revenueTypeEnum = z.enum(["SALES", "COMPENSATION", "PROFIT", "OTHER"]);
+
 export const achievementSchema = z.object({
   title: z.string().min(1),
   challenge: z.string().default(""),
@@ -49,17 +51,18 @@ export const achievementSchema = z.object({
   metricValue: z.string().nullable().optional(),
   skillsUsed: z.string().default(""),
   role: z.string().default(""),
-  isReproducible: z.coerce.boolean().default(false),
-  reproducibilityNote: z.string().default(""),
-  isMonetized: z.coerce.boolean().default(false),
   thirdPartyFeedback: z.string().default(""),
+  // revenueAmountはnull=未入力、0=発生なし、を区別する。空文字は未入力(null)として扱う。
+  revenueAmount: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().nullable()).default(null),
+  revenueCurrency: z.string().default("JPY"),
+  revenueType: revenueTypeEnum.default("SALES"),
+  revenuePeriod: z.string().default(""),
   evidenceUrl: z.string().nullable().optional(),
   evidenceNote: z.string().nullable().optional(),
   date: z.coerce.date(),
   categoryId: z.string().min(1),
   axisKeys: z.array(z.string()).default([]),
   sourceDiaryEntryId: z.string().nullable().optional(),
-  relatedRoadmapItemId: z.string().nullable().optional(),
   relatedIndividualGoalId: z.string().nullable().optional(),
 });
 
@@ -71,16 +74,16 @@ export const achievementUpdateSchema = z.object({
   metricValue: z.string().nullable().optional(),
   skillsUsed: z.string().optional(),
   role: z.string().optional(),
-  isReproducible: z.coerce.boolean().optional(),
-  reproducibilityNote: z.string().optional(),
-  isMonetized: z.coerce.boolean().optional(),
   thirdPartyFeedback: z.string().optional(),
+  revenueAmount: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().nullable()).optional(),
+  revenueCurrency: z.string().optional(),
+  revenueType: revenueTypeEnum.optional(),
+  revenuePeriod: z.string().optional(),
   evidenceUrl: z.string().nullable().optional(),
   evidenceNote: z.string().nullable().optional(),
   date: z.coerce.date().optional(),
   categoryId: z.string().min(1).optional(),
   axisKeys: z.array(z.string()).optional(),
-  relatedRoadmapItemId: z.string().nullable().optional(),
   relatedIndividualGoalId: z.string().nullable().optional(),
 });
 

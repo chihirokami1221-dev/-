@@ -1,6 +1,6 @@
 "use client";
 
-import { AXIS_DEFINITIONS } from "@/lib/marketValue/axes";
+import { ACHIEVEMENT_TAGGABLE_AXES } from "@/lib/marketValue/axes";
 
 export function AxisPicker({
   selected,
@@ -19,7 +19,7 @@ export function AxisPicker({
 
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-      {AXIS_DEFINITIONS.map((axis) => (
+      {ACHIEVEMENT_TAGGABLE_AXES.map((axis) => (
         <label
           key={axis.key}
           className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"

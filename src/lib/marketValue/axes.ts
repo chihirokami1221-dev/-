@@ -31,9 +31,9 @@ export const AXIS_DEFINITIONS: AxisDefinition[] = [
   {
     key: "reproducibility",
     label: "再現性",
-    description: "同じ成果を他の場面でも再現できるか。チェックだけでなく根拠の説明が必要。",
-    scoringNote: "「再現性あり」かつ再現できた根拠を具体的に記入した実績の件数から算出します。根拠が未記入の場合は加点しません。",
-    nextActionGuide: "再現性ありにチェックした実績に、具体的にどの場面で再現できたかの根拠を記入しましょう。",
+    description: "同じ成果を他の場面でも再現できるか。",
+    scoringNote: "実績登録時に「再現性」をタグ付けした件数から算出します。",
+    nextActionGuide: "別の場面でも再現できた実績を登録し、「再現性」の軸にタグ付けしましょう。",
   },
   {
     key: "third_party_evaluation",
@@ -46,10 +46,13 @@ export const AXIS_DEFINITIONS: AxisDefinition[] = [
     key: "market_demand",
     label: "市場需要",
     description: "求人・案件で求められるスキルや経験と、自分の実績がどれだけ重なっているか。",
-    scoringNote: "登録した市場データ(求人情報)の必須・歓迎スキルと、実績のスキルがどれだけ重なっているかから算出します。市場データが未登録の場合は評価しません。",
+    scoringNote: "登録した市場データ(求人情報)の必須・歓迎スキルと、全実績のスキルがどれだけ重なっているかから自動算出します(実績側でのタグ付けは不要)。市場データが未登録の場合は評価しません。",
     nextActionGuide: "市場データ(求人情報)を登録し、実績のスキルと重なっているかを確認しましょう。",
   },
 ];
+
+// 実績登録フォームでタグ付け可能な軸(市場需要は全実績のスキルから自動算出するため対象外)。
+export const ACHIEVEMENT_TAGGABLE_AXES = AXIS_DEFINITIONS.filter((a) => a.key !== "market_demand");
 
 export function getAxisDefinition(key: AxisKey): AxisDefinition {
   const def = AXIS_DEFINITIONS.find((a) => a.key === key);

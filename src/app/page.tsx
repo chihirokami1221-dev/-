@@ -11,9 +11,11 @@ import { RecommendedTasks } from "@/components/dashboard/RecommendedTasks";
 import { DailyPhilosophyQuote } from "@/components/dashboard/DailyPhilosophyQuote";
 import { DailyEnglishWord } from "@/components/dashboard/DailyEnglishWord";
 import { TodayBookRecommendation } from "@/components/dashboard/TodayBookRecommendation";
+import { RevenueSummaryCard } from "@/components/dashboard/RevenueSummaryCard";
 import { getStartOfWeek } from "@/lib/weekUtils";
 import { ensureTodayArchived } from "@/lib/dailyArchive";
 import { monthStartOfDate } from "@/lib/monthOptions";
+import { computeRevenueSummary } from "@/lib/revenueSummary";
 
 export default async function DashboardPage() {
   await connection();
@@ -65,6 +67,10 @@ export default async function DashboardPage() {
     orderBy: [{ dueDate: "asc" }],
   });
 
+  const revenueSummary = await computeRevenueSummary(
+    categories.map((c) => ({ id: c.id, label: c.label, color: c.color })),
+  );
+
   return (
     <div className="flex flex-col gap-8">
       <h1 className="text-2xl font-bold text-slate-900">ダッシュボード</h1>
@@ -101,6 +107,8 @@ export default async function DashboardPage() {
         stageTitle={stageEval.currentTitle}
         nextStageTitle={stageEval.nextStage?.title ?? null}
       />
+
+      <RevenueSummaryCard summary={revenueSummary} />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_320px]">
         <Card>

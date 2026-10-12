@@ -5,14 +5,10 @@ import { achievementSchema } from "@/lib/validation";
 export async function GET(req: NextRequest) {
   const categoryId = req.nextUrl.searchParams.get("categoryId") ?? undefined;
   const axisKey = req.nextUrl.searchParams.get("axisKey") ?? undefined;
-  const reproducible = req.nextUrl.searchParams.get("reproducible");
-  const monetized = req.nextUrl.searchParams.get("monetized");
 
   const achievements = await prisma.achievement.findMany({
     where: {
       categoryId: categoryId || undefined,
-      isReproducible: reproducible === "true" ? true : undefined,
-      isMonetized: monetized === "true" ? true : undefined,
       axisLinks: axisKey ? { some: { axisKey } } : undefined,
     },
     include: { category: true, axisLinks: true },

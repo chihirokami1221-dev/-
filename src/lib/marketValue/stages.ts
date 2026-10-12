@@ -37,7 +37,7 @@ export const STAGE_DEFINITIONS: StageDefinition[] = [
     minScore: 20,
     conditions: [
       {
-        label: "根拠のある再現性実績3件以上",
+        label: "再現性タグ付きの実績3件以上",
         check: (d) => d.totalReproducibleCount >= 3,
       },
     ],
@@ -64,7 +64,7 @@ export const STAGE_DEFINITIONS: StageDefinition[] = [
         check: (d) => d.axisScores.achievement_result.score >= 50,
       },
       {
-        label: "再現性軸が評価済み(根拠あり)",
+        label: "再現性軸が評価済み(タグ付き実績あり)",
         check: (d) => d.axisScores.reproducibility.status === "scored",
       },
     ],

@@ -8,7 +8,6 @@ export interface AxisEvidenceItem {
   achievementId: string;
   title: string;
   date: Date;
-  isReproducible: boolean;
   isMonetized: boolean;
 }
 
@@ -27,9 +26,10 @@ export interface MarketValueEvalData {
   normalizedScore: number; // 0-100。未評価/根拠不足の軸は0として平均に含める。
   axisScores: Record<AxisKey, AxisScoreResult>;
   totalAchievementCount: number;
-  totalReproducibleCount: number;
-  totalMonetizedCount: number;
+  totalReproducibleCount: number; // 「再現性」軸にタグ付けされた実績件数
+  totalMonetizedCount: number; // 収益額(revenueAmount)が0より大きい実績件数
   totalThirdPartyCount: number;
+  totalRevenueAmount: number; // 収益額が入力された実績の合計(revenueAmountがnullのものは含まない)
   marketDataCount: number;
   gapSkills: string[]; // 市場データで求められているが、どの実績のスキルにも一致しないもの
 }
@@ -44,19 +44,24 @@ function linkedTo(achievements: AchievementWithLinks[], axisKey: AxisKey) {
   return achievements.filter((a) => a.axisLinks.some((l) => l.axisKey === axisKey));
 }
 
+function isMonetized(a: AchievementWithLinks): boolean {
+  return a.revenueAmount !== null && a.revenueAmount > 0;
+}
+
 function toEvidence(a: AchievementWithLinks): AxisEvidenceItem {
   return {
     achievementId: a.id,
     title: a.title,
     date: a.date,
-    isReproducible: a.isReproducible,
-    isMonetized: a.isMonetized,
+    isMonetized: isMonetized(a),
   };
 }
 
+// 専門スキル・実績成果・再現性・第三者評価は、axisLinks(実績登録時のタグ付け)が唯一の根拠。
+// チェックボックス等の別フラグは持たず、タグ付けそのものがユーザーの意思表示となる。
 function evalSpecialistSkill(achievements: AchievementWithLinks[]): AxisScoreResult {
   const linked = linkedTo(achievements, "specialist_skill");
-  const reproducible = linked.filter((a) => a.isReproducible && a.reproducibilityNote.trim() !== "");
+  const reproducible = linked.filter((a) => a.axisLinks.some((l) => l.axisKey === "reproducibility"));
 
   if (linked.length === 0) {
     return {
@@ -74,7 +79,7 @@ function evalSpecialistSkill(achievements: AchievementWithLinks[]): AxisScoreRes
   const score = Math.min(100, linked.length * 15 + reproducible.length * 10);
   const missing: string[] = [];
   if (linked.length < 3) missing.push("実績データが少なく、根拠としてはまだ不足しています。");
-  if (reproducible.length === 0) missing.push("専門スキルを別の場面でも再現できた事例がまだありません。");
+  if (reproducible.length === 0) missing.push("専門スキルを別の場面でも再現できた事例(再現性タグ)がまだありません。");
 
   return {
     key: "specialist_skill",
@@ -90,8 +95,8 @@ function evalSpecialistSkill(achievements: AchievementWithLinks[]): AxisScoreRes
 
 function evalAchievementResult(achievements: AchievementWithLinks[]): AxisScoreResult {
   const linked = linkedTo(achievements, "achievement_result");
-  const quantified = linked.filter((a) => (a.metricValue ?? "").trim() !== "");
-  const monetized = linked.filter((a) => a.isMonetized);
+  const quantified = linked.filter((a) => (a.metricValue ?? "").trim() !== "" || a.revenueAmount !== null);
+  const monetized = linked.filter(isMonetized);
 
   if (linked.length === 0) {
     return {
@@ -108,7 +113,7 @@ function evalAchievementResult(achievements: AchievementWithLinks[]): AxisScoreR
 
   const score = Math.min(100, linked.length * 10 + quantified.length * 15 + monetized.length * 10);
   const missing: string[] = [];
-  if (quantified.length === 0) missing.push("数値で示せる成果がまだ登録されていません。");
+  if (quantified.length === 0) missing.push("数値や収益額で示せる成果がまだ登録されていません。");
 
   return {
     key: "achievement_result",
@@ -124,7 +129,6 @@ function evalAchievementResult(achievements: AchievementWithLinks[]): AxisScoreR
 
 function evalReproducibility(achievements: AchievementWithLinks[]): AxisScoreResult {
   const linked = linkedTo(achievements, "reproducibility");
-  const valid = linked.filter((a) => a.isReproducible && a.reproducibilityNote.trim() !== "");
 
   if (linked.length === 0) {
     return {
@@ -139,22 +143,7 @@ function evalReproducibility(achievements: AchievementWithLinks[]): AxisScoreRes
     };
   }
 
-  if (valid.length === 0) {
-    return {
-      key: "reproducibility",
-      label: "再現性",
-      status: "insufficient_evidence",
-      score: 0,
-      baseCount: linked.length,
-      validCount: 0,
-      evidence: linked.map(toEvidence),
-      missingEvidence: ["タグ付けはありますが、再現できた根拠(具体的な説明)が未記入です。"],
-    };
-  }
-
-  const score = Math.min(100, valid.length * 25);
-  const missing: string[] = [];
-  if (valid.length < linked.length) missing.push("一部の実績は再現できた根拠が未記入です。");
+  const score = Math.min(100, linked.length * 25);
 
   return {
     key: "reproducibility",
@@ -162,9 +151,9 @@ function evalReproducibility(achievements: AchievementWithLinks[]): AxisScoreRes
     status: "scored",
     score,
     baseCount: linked.length,
-    validCount: valid.length,
-    evidence: valid.map(toEvidence),
-    missingEvidence: missing,
+    validCount: linked.length,
+    evidence: linked.map(toEvidence),
+    missingEvidence: [],
   };
 }
 
@@ -212,13 +201,13 @@ function evalThirdPartyEvaluation(achievements: AchievementWithLinks[]): AxisSco
   };
 }
 
+// 市場需要は実績側のタグ付けに依存せず、全実績のスキルを市場データと自動照合する。
 async function evalMarketDemand(achievements: AchievementWithLinks[]): Promise<{
   result: AxisScoreResult;
   gapSkills: string[];
   marketDataCount: number;
 }> {
   const marketEntries = await prisma.marketDataEntry.findMany();
-  const linked = linkedTo(achievements, "market_demand");
 
   if (marketEntries.length === 0) {
     return {
@@ -227,9 +216,9 @@ async function evalMarketDemand(achievements: AchievementWithLinks[]): Promise<{
         label: "市場需要",
         status: "not_evaluated",
         score: 0,
-        baseCount: linked.length,
+        baseCount: 0,
         validCount: 0,
-        evidence: linked.map(toEvidence),
+        evidence: [],
         missingEvidence: ["市場データ(求人情報)がまだ登録されていません。"],
       },
       gapSkills: [],
@@ -238,7 +227,7 @@ async function evalMarketDemand(achievements: AchievementWithLinks[]): Promise<{
   }
 
   const marketSkillGroups = marketEntries.map((m) => `${m.requiredSkills},${m.preferredSkills}`);
-  const matched = linked.filter((a) =>
+  const matched = achievements.filter((a) =>
     marketSkillGroups.some((group) => skillsOverlap(a.skillsUsed, group)),
   );
 
@@ -247,26 +236,42 @@ async function evalMarketDemand(achievements: AchievementWithLinks[]): Promise<{
     achievements.map((a) => a.skillsUsed),
   );
 
-  if (linked.length === 0) {
+  if (achievements.length === 0) {
     return {
       result: {
         key: "market_demand",
         label: "市場需要",
-        status: "insufficient_evidence",
+        status: "not_evaluated",
         score: 0,
         baseCount: 0,
         validCount: 0,
         evidence: [],
-        missingEvidence: ["市場データはありますが、対応する実績がまだタグ付けされていません。"],
+        missingEvidence: ["実績がまだ登録されていません。"],
       },
       gapSkills,
       marketDataCount: marketEntries.length,
     };
   }
 
-  const score = Math.min(100, matched.length * 20 + (linked.length - matched.length) * 5);
+  if (matched.length === 0) {
+    return {
+      result: {
+        key: "market_demand",
+        label: "市場需要",
+        status: "insufficient_evidence",
+        score: 0,
+        baseCount: achievements.length,
+        validCount: 0,
+        evidence: [],
+        missingEvidence: ["市場データが求めるスキルと一致する実績がまだありません。"],
+      },
+      gapSkills,
+      marketDataCount: marketEntries.length,
+    };
+  }
+
+  const score = Math.min(100, matched.length * 20);
   const missing: string[] = [];
-  if (matched.length === 0) missing.push("市場データが求めるスキルと一致する実績がまだありません。");
   if (gapSkills.length > 0) missing.push(`市場で求められているが実績が無いスキル: ${gapSkills.slice(0, 5).join("、")}`);
 
   return {
@@ -275,9 +280,9 @@ async function evalMarketDemand(achievements: AchievementWithLinks[]): Promise<{
       label: "市場需要",
       status: "scored",
       score,
-      baseCount: linked.length,
+      baseCount: achievements.length,
       validCount: matched.length,
-      evidence: linked.map(toEvidence),
+      evidence: matched.map(toEvidence),
       missingEvidence: missing,
     },
     gapSkills,
@@ -304,9 +309,10 @@ export async function computeMarketValue(): Promise<MarketValueEvalData> {
     normalizedScore,
     axisScores,
     totalAchievementCount: achievements.length,
-    totalReproducibleCount: achievements.filter((a) => a.isReproducible && a.reproducibilityNote.trim() !== "").length,
-    totalMonetizedCount: achievements.filter((a) => a.isMonetized).length,
+    totalReproducibleCount: linkedTo(achievements, "reproducibility").length,
+    totalMonetizedCount: achievements.filter(isMonetized).length,
     totalThirdPartyCount: achievements.filter((a) => a.thirdPartyFeedback.trim() !== "").length,
+    totalRevenueAmount: achievements.reduce((sum, a) => sum + (a.revenueAmount ?? 0), 0),
     marketDataCount: marketDemand.marketDataCount,
     gapSkills: marketDemand.gapSkills,
   };

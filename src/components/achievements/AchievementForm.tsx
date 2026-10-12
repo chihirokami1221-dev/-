@@ -32,6 +32,15 @@ interface LinkOption {
   title: string;
 }
 
+type RevenueType = "SALES" | "COMPENSATION" | "PROFIT" | "OTHER";
+
+const REVENUE_TYPE_LABEL: Record<RevenueType, string> = {
+  SALES: "売上",
+  COMPENSATION: "報酬",
+  PROFIT: "利益",
+  OTHER: "その他",
+};
+
 interface AchievementFormInitial {
   id?: string;
   title?: string;
@@ -41,10 +50,11 @@ interface AchievementFormInitial {
   metricValue?: string | null;
   skillsUsed?: string;
   role?: string;
-  isReproducible?: boolean;
-  reproducibilityNote?: string;
-  isMonetized?: boolean;
   thirdPartyFeedback?: string;
+  revenueAmount?: number | null;
+  revenueCurrency?: string;
+  revenueType?: RevenueType;
+  revenuePeriod?: string;
   evidenceUrl?: string | null;
   evidenceNote?: string | null;
   date?: Date | string;
@@ -81,10 +91,14 @@ export function AchievementForm({
   const [metricValue, setMetricValue] = useState(initial?.metricValue ?? "");
   const [skillsUsed, setSkillsUsed] = useState(initial?.skillsUsed ?? "");
   const [role, setRole] = useState(initial?.role ?? "");
-  const [isReproducible, setIsReproducible] = useState(initial?.isReproducible ?? false);
-  const [reproducibilityNote, setReproducibilityNote] = useState(initial?.reproducibilityNote ?? "");
-  const [isMonetized, setIsMonetized] = useState(initial?.isMonetized ?? false);
   const [thirdPartyFeedback, setThirdPartyFeedback] = useState(initial?.thirdPartyFeedback ?? "");
+  // 収益額は「未入力」と「0円」を区別するため、入力欄は空文字(未入力)と"0"(発生なし)を別の状態として扱う。
+  const [revenueAmount, setRevenueAmount] = useState(
+    initial?.revenueAmount !== undefined && initial?.revenueAmount !== null ? String(initial.revenueAmount) : ""
+  );
+  const [revenueCurrency, setRevenueCurrency] = useState(initial?.revenueCurrency ?? "JPY");
+  const [revenueType, setRevenueType] = useState<RevenueType>(initial?.revenueType ?? "SALES");
+  const [revenuePeriod, setRevenuePeriod] = useState(initial?.revenuePeriod ?? "");
   const [evidenceUrl, setEvidenceUrl] = useState(initial?.evidenceUrl ?? "");
   const [evidenceNote, setEvidenceNote] = useState(initial?.evidenceNote ?? "");
   const [date, setDate] = useState(toDateInputValue(initial?.date));
@@ -137,10 +151,11 @@ export function AchievementForm({
       metricValue,
       skillsUsed,
       role,
-      isReproducible,
-      reproducibilityNote,
-      isMonetized,
       thirdPartyFeedback,
+      revenueAmount: revenueAmount.trim() === "" ? null : Number(revenueAmount),
+      revenueCurrency,
+      revenueType,
+      revenuePeriod,
       evidenceUrl,
       evidenceNote,
       date,
@@ -212,62 +227,35 @@ export function AchievementForm({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">課題</label>
-        <Textarea rows={2} value={challenge} onChange={(e) => setChallenge(e.target.value)} />
-      </div>
-
-      <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">行動</label>
-        <Textarea rows={2} value={action} onChange={(e) => setAction(e.target.value)} />
+        <Textarea required rows={2} value={action} onChange={(e) => setAction(e.target.value)} />
       </div>
 
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">結果</label>
-        <Textarea rows={2} value={result} onChange={(e) => setResult(e.target.value)} />
+        <Textarea required rows={2} value={result} onChange={(e) => setResult(e.target.value)} />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">使用したスキル(カンマ区切り、複数可)</label>
+        <Input required value={skillsUsed} onChange={(e) => setSkillsUsed(e.target.value)} />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">課題(任意)</label>
+        <Textarea rows={2} value={challenge} onChange={(e) => setChallenge(e.target.value)} />
       </div>
 
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">
-          数値(任意。例: 「作業時間を30%削減」)
+          数値(任意・金額以外。例: 「作業時間を30%削減」。収益額は下の「収益」欄に入力してください)
         </label>
         <Input value={metricValue} onChange={(e) => setMetricValue(e.target.value)} />
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">使用したスキル(カンマ区切り)</label>
-        <Input value={skillsUsed} onChange={(e) => setSkillsUsed(e.target.value)} />
-      </div>
-
-      <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">自分が担当した範囲(任意)</label>
         <Textarea rows={2} value={role} onChange={(e) => setRole(e.target.value)} />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={isReproducible}
-            onChange={(e) => setIsReproducible(e.target.checked)}
-          />
-          再現性がある(同じ手法を別の場面でも再現できた)
-        </label>
-        {isReproducible && (
-          <Textarea
-            rows={2}
-            placeholder="再現できた根拠(例: 別の案件でも同じ手法で成果が出た等)。未記入だと再現性軸には加点されません。"
-            value={reproducibilityNote}
-            onChange={(e) => setReproducibilityNote(e.target.value)}
-          />
-        )}
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={isMonetized}
-            onChange={(e) => setIsMonetized(e.target.checked)}
-          />
-          収益化につながった
-        </label>
       </div>
 
       <div>
@@ -279,6 +267,38 @@ export function AchievementForm({
           placeholder="未記入だと第三者評価軸には加点されません。"
           value={thirdPartyFeedback}
           onChange={(e) => setThirdPartyFeedback(e.target.value)}
+        />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 p-3">
+        <div className="mb-2 text-sm font-medium text-slate-700">収益(任意)</div>
+        <p className="mb-2 text-xs text-slate-500">
+          実際に発生した金額のみを入力してください(見込み・推定額は入力しない)。未入力と「0円」は区別して記録されます。
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <Input
+            type="number"
+            placeholder="金額(未入力可)"
+            value={revenueAmount}
+            onChange={(e) => setRevenueAmount(e.target.value)}
+          />
+          <Select value={revenueCurrency} onChange={(e) => setRevenueCurrency(e.target.value)}>
+            <option value="JPY">円</option>
+            <option value="USD">ドル</option>
+          </Select>
+          <Select value={revenueType} onChange={(e) => setRevenueType(e.target.value as RevenueType)}>
+            {(Object.keys(REVENUE_TYPE_LABEL) as RevenueType[]).map((k) => (
+              <option key={k} value={k}>
+                {REVENUE_TYPE_LABEL[k]}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Input
+          className="mt-2"
+          placeholder="対象期間(任意。例: 2026年10月)"
+          value={revenuePeriod}
+          onChange={(e) => setRevenuePeriod(e.target.value)}
         />
       </div>
 
@@ -308,8 +328,11 @@ export function AchievementForm({
 
       <div>
         <label className="mb-2 block text-sm font-medium text-slate-700">
-          関連する市場価値の軸(複数選択可)
+          関連する市場価値の軸(複数選択可・任意)
         </label>
+        <p className="mb-2 text-xs text-slate-500">
+          「再現性」は、同じ手法を別の場面でも再現できた場合にタグ付けしてください(これが再現性の唯一の判定基準です)。
+        </p>
         <AxisPicker selected={axisKeys} onChange={setAxisKeys} />
       </div>
 
