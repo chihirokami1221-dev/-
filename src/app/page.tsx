@@ -13,6 +13,7 @@ import { DailyEnglishWord } from "@/components/dashboard/DailyEnglishWord";
 import { TodayBookRecommendation } from "@/components/dashboard/TodayBookRecommendation";
 import { getStartOfWeek } from "@/lib/weekUtils";
 import { ensureTodayArchived } from "@/lib/dailyArchive";
+import { monthStartOfDate } from "@/lib/monthOptions";
 
 export default async function DashboardPage() {
   await connection();
@@ -50,10 +51,18 @@ export default async function DashboardPage() {
     orderBy: { title: "asc" },
   });
 
+  // 期限つきだけでなく、期限が無くても「今月が対象月」の優先度「高」の目標も、おすすめタスクに含める
+  // (ロードマップの重点行動から自動生成された目標は期限が入らない仕様のため)。
+  const currentMonthStart = monthStartOfDate(now);
   const recommendedGoals = await prisma.individualGoal.findMany({
-    where: { syncDeleted: false, status: { not: "DONE" }, priority: "HIGH", dueDate: { not: null } },
+    where: {
+      syncDeleted: false,
+      status: { not: "DONE" },
+      priority: "HIGH",
+      OR: [{ dueDate: { not: null } }, { targetMonth: currentMonthStart }],
+    },
     select: { id: true, title: true, categoryId: true, dueDate: true },
-    orderBy: { dueDate: "asc" },
+    orderBy: [{ dueDate: "asc" }],
   });
 
   return (
@@ -106,9 +115,12 @@ export default async function DashboardPage() {
         <Card className="border-amber-100 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/40">
           <RecommendedTasks
             categories={categories.map((c) => ({ id: c.id, label: c.label, color: c.color }))}
-            goals={recommendedGoals
-              .filter((g) => g.dueDate !== null)
-              .map((g) => ({ id: g.id, title: g.title, categoryId: g.categoryId, dueDate: g.dueDate!.toISOString() }))}
+            goals={recommendedGoals.map((g) => ({
+              id: g.id,
+              title: g.title,
+              categoryId: g.categoryId,
+              dueDate: g.dueDate ? g.dueDate.toISOString() : null,
+            }))}
           />
         </Card>
       </div>
