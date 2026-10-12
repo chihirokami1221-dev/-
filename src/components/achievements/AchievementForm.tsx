@@ -50,7 +50,6 @@ interface AchievementFormInitial {
   date?: Date | string;
   categoryId?: string;
   axisLinks?: { axisKey: string }[];
-  relatedRoadmapItemId?: string | null;
   relatedIndividualGoalId?: string | null;
 }
 
@@ -62,12 +61,10 @@ function toDateInputValue(date?: Date | string): string {
 export function AchievementForm({
   categories,
   initial,
-  roadmapItems = [],
   individualGoals = [],
 }: {
   categories: CategoryOption[];
   initial?: AchievementFormInitial;
-  roadmapItems?: LinkOption[];
   individualGoals?: LinkOption[];
 }) {
   const router = useRouter();
@@ -95,7 +92,6 @@ export function AchievementForm({
   const [axisKeys, setAxisKeys] = useState<string[]>(
     initial?.axisLinks?.map((l) => l.axisKey) ?? []
   );
-  const [relatedRoadmapItemId, setRelatedRoadmapItemId] = useState(initial?.relatedRoadmapItemId ?? "");
   const [relatedIndividualGoalId, setRelatedIndividualGoalId] = useState(initial?.relatedIndividualGoalId ?? "");
   const [sourceDiaryEntryId, setSourceDiaryEntryId] = useState<string | null>(null);
 
@@ -150,7 +146,6 @@ export function AchievementForm({
       date,
       categoryId,
       axisKeys,
-      relatedRoadmapItemId: relatedRoadmapItemId || null,
       relatedIndividualGoalId: relatedIndividualGoalId || null,
       ...(sourceDiaryEntryId ? { sourceDiaryEntryId } : {}),
     };
@@ -297,30 +292,17 @@ export function AchievementForm({
         <Textarea rows={2} value={evidenceNote} onChange={(e) => setEvidenceNote(e.target.value)} />
       </div>
 
-      {(roadmapItems.length > 0 || individualGoals.length > 0) && (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">関連するロードマップ(任意)</label>
-            <Select value={relatedRoadmapItemId} onChange={(e) => setRelatedRoadmapItemId(e.target.value)}>
-              <option value="">(選択しない)</option>
-              {roadmapItems.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.title}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">関連する個別目標(任意)</label>
-            <Select value={relatedIndividualGoalId} onChange={(e) => setRelatedIndividualGoalId(e.target.value)}>
-              <option value="">(選択しない)</option>
-              {individualGoals.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.title}
-                </option>
-              ))}
-            </Select>
-          </div>
+      {individualGoals.length > 0 && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">関連する個別目標(任意)</label>
+          <Select value={relatedIndividualGoalId} onChange={(e) => setRelatedIndividualGoalId(e.target.value)}>
+            <option value="">(選択しない)</option>
+            {individualGoals.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.title}
+              </option>
+            ))}
+          </Select>
         </div>
       )}
 

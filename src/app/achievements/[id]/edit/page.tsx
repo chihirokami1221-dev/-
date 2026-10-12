@@ -7,10 +7,9 @@ import { BackButton } from "@/components/ui/BackButton";
 
 export default async function EditAchievementPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [categories, achievement, roadmapItems, individualGoals] = await Promise.all([
+  const [categories, achievement, individualGoals] = await Promise.all([
     prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.achievement.findUnique({ where: { id }, include: { axisLinks: true } }),
-    prisma.roadmapItem.findMany({ select: { id: true, title: true }, orderBy: { title: "asc" } }),
     prisma.individualGoal.findMany({
       where: { syncDeleted: false },
       select: { id: true, title: true },
@@ -28,7 +27,6 @@ export default async function EditAchievementPage({ params }: { params: Promise<
         <AchievementForm
           categories={categories}
           initial={achievement}
-          roadmapItems={roadmapItems}
           individualGoals={individualGoals}
         />
       </Suspense>
