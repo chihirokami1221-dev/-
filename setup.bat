@@ -19,7 +19,10 @@ if errorlevel 1 (
 
 if not exist ".env" (
   echo [0/3] 設定ファイルを準備中...
-  copy /y ".env.example" ".env" >nul
+  echo DATABASE_URL="file:./dev.db" > .env
+  echo OLLAMA_BASE_URL="http://localhost:11434" >> .env
+  echo OLLAMA_MODEL="qwen2.5:7b" >> .env
+  echo OLLAMA_CHAT_MODEL="qwen2.5:3b" >> .env
 )
 
 echo [1/3] 必要なファイルをダウンロード中...(数分かかります)
