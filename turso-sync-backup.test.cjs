@@ -160,7 +160,7 @@ test("copyWithSiblings: 本体ファイルと付随ファイルの両方が、de
 
 // --- cleanupSiblings: 今回の実行専用ファイルだけを削除し、無関係な既存ファイルは残す ---
 
-test("cleanupSiblings: 対象外の既存ファイル(似た名前・無関係な名前)を誤削除しない", () => {
+test("cleanupSiblings: 対象外の既存ファイル(似た名前・無関係な名前)を誤削除しない", async () => {
   const dir = path.join(os.tmpdir(), `cleanup-scope-test-${Date.now()}`);
   fs.mkdirSync(dir, { recursive: true });
   const target = path.join(dir, "run_replica_2026-01-01T00-00-00-000Z.db");
@@ -173,7 +173,7 @@ test("cleanupSiblings: 対象外の既存ファイル(似た名前・無関係�
   fs.writeFileSync(unrelatedOtherFile, "x");
 
   try {
-    cleanupSiblings(target);
+    await cleanupSiblings(target);
     assert.equal(fs.existsSync(target), false, "対象ファイル自体は削除されるべき");
     assert.equal(fs.existsSync(targetSibling), false, "対象の付随ファイルは削除されるべき");
     assert.equal(fs.existsSync(unrelatedOlderRun), true, "別実行の既存ファイルは残すべき(誤削除禁止)");

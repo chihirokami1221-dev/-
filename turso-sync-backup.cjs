@@ -148,20 +148,33 @@ function reserveFile(filePath) {
 // -client_wal_index 等)をすべて削除する。接尾辞を個別に列挙する方式では、
 // ライブラリが新しい付随ファイルを追加した場合に取り残しが発生する
 // (実際にテストで-client_wal_indexの取り残しを検出したため、glob方式に変更した)。
-function cleanupSiblings(basePath) {
+//
+// close()直後に呼ばれることが多いため、retryOnBusyで待機する(実機テストで、
+// リトライせずに即unlinkSyncすると、close()後のロックが原因でEBUSYが握りつぶされ、
+// ファイルが削除されずに残ってしまう不具合が実際に発生したため修正した)。
+// 戻り値: 最終的に削除できなかったファイルのパス一覧(空配列なら全て削除成功)。
+// 呼び出し側は、これが空でない場合にログへ記録し、手動確認が必要なことを明示する。
+async function cleanupSiblings(basePath) {
   const dir = path.dirname(basePath);
   const base = path.basename(basePath);
   let entries;
   try {
     entries = fs.readdirSync(dir);
   } catch {
-    return;
+    return [];
   }
+  const failed = [];
   for (const entry of entries) {
     if (entry === base || entry.startsWith(base)) {
-      try { fs.unlinkSync(path.join(dir, entry)); } catch {}
+      const full = path.join(dir, entry);
+      try {
+        await retryOnBusy(() => fs.unlinkSync(full));
+      } catch {
+        failed.push(full);
+      }
     }
   }
+  return failed;
 }
 
 // basePathの本体ファイルだけでなく、同じディレクトリにある付随ファイル(例:
@@ -191,10 +204,12 @@ function copyWithSiblings(basePath, destPath) {
   if (!copiedMain) throw new Error("コピー元の本体ファイルが見つかりません: " + basePath);
 }
 
-// Windowsでは、閉じた直後のファイルハンドル解放に遅延が生じることがある
-// (実際にテストで検証: @libsql/clientのclose()後、最大8秒程度ファイルがロックされたまま
-// だった)。そのため、クローズ後のファイル操作は十分な予算でリトライする。
-async function retryOnBusy(fn, attempts = 25, delayMs = 500) {
+// Windowsでは、閉じた直後のファイルハンドル解放に遅延が生じることがある。
+// 実機テストで、通常は最大8秒程度だが、sync()がネイティブ側で長時間(約100秒)
+// イベントループを占有しながらリトライし続けた直後は、12.5秒の予算でも解放されず
+// 削除漏れが発生した。そのため、さらに長い予算でリトライする
+// (それでも解放されない場合は、RESULT=FAILUREのログに記録し、呼び出し元で後日手動確認する)。
+async function retryOnBusy(fn, attempts = 60, delayMs = 1000) {
   for (let i = 0; i < attempts; i++) {
     try {
       return fn();
@@ -202,6 +217,12 @@ async function retryOnBusy(fn, attempts = 25, delayMs = 500) {
       if (e.code !== "EBUSY" || i === attempts - 1) throw e;
       await new Promise((r) => setTimeout(r, delayMs));
     }
+  }
+}
+
+function logCleanupResult(log, leftover) {
+  if (leftover.length > 0) {
+    log("警告: 以下のファイルの削除に失敗しました(手動確認が必要です。既存バックアップ・本番データではありません): " + leftover.join(", "));
   }
 }
 
@@ -235,7 +256,7 @@ async function runTursoSyncBackup(config) {
   }
   // reserveFileは空ファイルを作るだけなので、実際にEmbedded Replica/コピー先として使うには
   // 一度削除して、ライブラリ自身にファイルを作らせる(空ファイルが既に存在すると混乱するため)。
-  cleanupSiblings(replicaPath);
+  logCleanupResult(log, await cleanupSiblings(replicaPath));
   fs.unlinkSync(snapshotPath);
   fs.unlinkSync(logPath);
 
@@ -250,7 +271,7 @@ async function runTursoSyncBackup(config) {
   } catch (e) {
     log("RESULT=FAILURE");
     log("リモートへの直結接続・件数取得に失敗しました: " + e.message.split("\n")[0]);
-    cleanupSiblings(replicaPath);
+    logCleanupResult(log, await cleanupSiblings(replicaPath));
     return { success: false, reason: "remote-count-failed: " + e.message.split("\n")[0] };
   }
 
@@ -268,7 +289,7 @@ async function runTursoSyncBackup(config) {
     log("RESULT=FAILURE");
     log("Embedded Replicaへの同期に失敗しました: " + e.message.split("\n")[0]);
     try { replicaClient && replicaClient.close(); } catch {}
-    cleanupSiblings(replicaPath);
+    logCleanupResult(log, await cleanupSiblings(replicaPath));
     return { success: false, reason: "sync-failed: " + e.message.split("\n")[0] };
   } finally {
     // 同期中は公式に「別接続で開くと破損の可能性がある」とされているため、
@@ -288,7 +309,7 @@ async function runTursoSyncBackup(config) {
   } catch (e) {
     log("RESULT=FAILURE");
     log("スナップショットへのコピーに失敗しました: " + e.message.split("\n")[0]);
-    cleanupSiblings(replicaPath);
+    logCleanupResult(log, await cleanupSiblings(replicaPath));
     try { fs.unlinkSync(snapshotPath); } catch {}
     return { success: false, reason: "copy-failed: " + e.message.split("\n")[0] };
   }
@@ -309,7 +330,7 @@ async function runTursoSyncBackup(config) {
     log("RESULT=FAILURE");
     log(decision.reason);
     log("不完全なバックアップのため、作成したファイルは成功扱いせず削除します。");
-    cleanupSiblings(replicaPath);
+    logCleanupResult(log, await cleanupSiblings(replicaPath));
     try { fs.unlinkSync(snapshotPath); } catch {}
     return { success: false, reason: decision.reason };
   }
@@ -329,7 +350,7 @@ async function runTursoSyncBackup(config) {
   log("ログ: " + logPath);
 
   // レプリカファイル自体はスナップショットを取った後は不要(検証対象はスナップショット側のみ)。
-  cleanupSiblings(replicaPath);
+  logCleanupResult(log, await cleanupSiblings(replicaPath));
 
   return { success: true, reason: null, snapshotPath, logPath };
 }
