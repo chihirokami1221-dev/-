@@ -157,6 +157,41 @@ function reserveFile(filePath) {
   return { ok: true };
 }
 
+// スナップショットのコピー(本体+WAL+SHM等)を、書き込み可能で開いてチェックポイントし、
+// WAL上の未反映データを本体ファイルへ完全に統合する。これにより「本体ファイル1つだけで
+// 内容を再現できる」状態になる(実機テストで、実際の同期時にWALファイルへ約688KBの
+// データが書き込まれることを確認したため、本体ファイルだけのコピーでは不十分な可能性があった)。
+// チェックポイント後、空になった付随ファイル(-wal, -shm等)は削除し、本体ファイルのみ残す。
+// 対象はスナップショット(自分のコピー)のみで、元のレプリカ・リモートには一切触れない。
+async function consolidateSnapshot(snapshotPath) {
+  const writable = new DatabaseSync(snapshotPath);
+  try {
+    writable.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    // チェックポイントだけでは-shmファイルが残ることを実機で確認した(-walは0バイトに
+    // truncateされるが、-shmは固定サイズの共有メモリ構造のため縮小されない)。
+    // WALモード自体から抜ける(DELETEモードへ切り替える)と、SQLiteの仕様により
+    // -wal/-shmファイルそのものが削除される。
+    writable.exec("PRAGMA journal_mode=DELETE");
+  } finally {
+    writable.close();
+  }
+  const dir = path.dirname(snapshotPath);
+  const base = path.basename(snapshotPath);
+  const failed = [];
+  for (const entry of fs.readdirSync(dir)) {
+    if (entry !== base && entry.startsWith(base)) {
+      // close()直後はWindowsでファイルがロックされたままの場合があるため(実機で再発を確認)、
+      // retryOnBusyで待機してから削除する。
+      try {
+        await retryOnBusy(() => fs.unlinkSync(path.join(dir, entry)));
+      } catch {
+        failed.push(path.join(dir, entry));
+      }
+    }
+  }
+  return failed;
+}
+
 function copyWithSiblings(basePath, destPath) {
   const dir = path.dirname(basePath);
   const base = path.basename(basePath);
@@ -293,17 +328,40 @@ async function runTursoSyncBackup(config) {
     return { success: false, reason: "copy-failed: " + e.message.split("\n")[0] };
   }
 
-  // --- 4. コピー(スナップショット)だけをnode:sqliteで読み取り専用検証する ---
+  // --- 4. スナップショットをWALチェックポイントで単一ファイルへ統合し、読み取り専用検証する ---
   let localSnapshot;
   try {
+    logCleanupResult(log, await consolidateSnapshot(snapshotPath));
     localSnapshot = snapshotLocalFile(snapshotPath);
   } catch (e) {
     log("RESULT=FAILURE");
-    log("スナップショットの検証に失敗しました: " + e.message.split("\n")[0]);
+    log("スナップショットの統合・検証に失敗しました: " + e.message.split("\n")[0]);
+    logCleanupResult(log, await cleanupSiblings(replicaPath));
     return { success: false, reason: "verify-failed: " + e.message.split("\n")[0] };
   }
 
-  const decision = decideSuccess(remoteSnapshot, localSnapshot);
+  let decision = decideSuccess(remoteSnapshot, localSnapshot);
+
+  // リモートの比較時点(手順1)と同期完了後のローカル状態(手順2〜4)の間に、リモート側で
+  // 実際にデータが変化した場合、件数・ハッシュがずれること自体は不具合ではない。
+  // そのため、不一致(整合性エラーではない場合)は1回だけリモートを再取得して再比較し、
+  // 再取得後も不一致が続く場合のみ本当の失敗として扱う。
+  if (!decision.success && localSnapshot.integrity === "ok") {
+    log("件数/ハッシュの不一致を検出。比較時点のずれの可能性があるため、リモートを再取得して再比較します。");
+    try {
+      const recheckSnapshot = await fetchRemoteSnapshot(config.remoteUrl, config.authToken, config.countTimeoutMs || 20000);
+      const recheckDecision = decideSuccess(recheckSnapshot, localSnapshot);
+      if (recheckDecision.success) {
+        log("再比較の結果、一致しました(比較時点のずれだったと判断)。");
+        decision = recheckDecision;
+        remoteSnapshot = recheckSnapshot;
+      } else {
+        decision = { success: false, reason: "再比較しても不一致: " + recheckDecision.reason };
+      }
+    } catch (e) {
+      log("再比較のためのリモート再取得に失敗しました: " + e.message.split("\n")[0]);
+    }
+  }
 
   if (!decision.success) {
     log("RESULT=FAILURE");
@@ -343,6 +401,7 @@ module.exports = {
   reserveFile,
   cleanupSiblings,
   copyWithSiblings,
+  consolidateSnapshot,
   retryOnBusy,
   isMissingTableError,
   TABLES,

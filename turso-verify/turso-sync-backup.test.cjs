@@ -21,6 +21,7 @@ const {
   retryOnBusy,
   cleanupSiblings,
   copyWithSiblings,
+  consolidateSnapshot,
   TABLES,
 } = require("./turso-sync-backup.cjs");
 
@@ -267,6 +268,35 @@ test("統合: 改ざんされたスナップショットは不一致として検
   for (const p of [sourcePath, snapshotPath]) {
     for (const suffix of ["", "-wal", "-shm"]) { try { fs.unlinkSync(p + suffix); } catch {} }
   }
+});
+
+// --- A. consolidateSnapshot: チェックポイント後、本体ファイル単独で内容を再現できること ---
+
+test("consolidateSnapshot: チェックポイント後にWAL/SHMが削除され、本体ファイル単独で全データが読める", async () => {
+  const dbPath = path.join(os.tmpdir(), `consolidate-test-${Date.now()}.db`);
+  const client = createClient({ url: `file:${dbPath}` });
+  await client.executeMultiple(`CREATE TABLE "Memo" ("id" TEXT PRIMARY KEY, "v" TEXT);`);
+  for (let i = 0; i < 30; i++) {
+    await client.execute({ sql: `INSERT INTO "Memo" (id, v) VALUES (?, ?)`, args: [`m${i}`, `v${i}`] });
+  }
+  client.close();
+  await retryOnBusy(() => fs.statSync(dbPath));
+
+  await consolidateSnapshot(dbPath);
+
+  const dir = path.dirname(dbPath);
+  const base = path.basename(dbPath);
+  const siblings = fs.readdirSync(dir).filter((f) => f !== base && f.startsWith(base));
+  assert.deepEqual(siblings, [], "チェックポイント後は付随ファイルが残っていないべき");
+
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const integrity = db.prepare("PRAGMA integrity_check").get().integrity_check;
+  const count = db.prepare(`SELECT COUNT(*) as c FROM "Memo"`).get().c;
+  db.close();
+  assert.equal(integrity, "ok");
+  assert.equal(count, 30);
+
+  await retryOnBusy(() => fs.unlinkSync(dbPath));
 });
 
 console.log("\n全テストを実行しました(node:testのサマリーは標準出力の上部を参照)。");
