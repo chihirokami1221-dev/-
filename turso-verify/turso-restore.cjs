@@ -26,6 +26,12 @@ const TABLES_IN_FK_ORDER = [
   "WeeklyTodoItem", "MarketValueScoreSnapshot", "MarketDataEntry", "Memo",
 ];
 
+// libSQL/Tursoのbatch()に明文化された件数上限は確認できなかった(公式ブログでは1000件の
+// 一括実行例があり、通常は問題ないとされる)。ただし未確認である以上、Growth OSの実データ量
+// (現時点で数十〜100件程度)を大きく超える場合は、未知の上限に無言で引っかかるより、
+// 事前に安全側で中止したい。この値は保守的な目安であり、確証のある公式の上限ではない。
+const MAX_RESTORE_STATEMENTS = 2000;
+
 function canonicalValue(value) {
   if (value === null) return "\u0000NULL\u0000";
   if (value instanceof ArrayBuffer || Buffer.isBuffer(value)) {
@@ -88,6 +94,25 @@ async function verifyTargetIsEmpty(client, timeoutMs = 20000) {
     }
   }
   return nonEmpty;
+}
+
+// 復元先の各テーブルの列構成を取得する(スキーマ不一致を、INSERT実行前に検知するため)。
+async function fetchTargetSchema(client, timeoutMs = 20000) {
+  const schema = {};
+  for (const t of TABLES_IN_FK_ORDER) {
+    try {
+      const rs = await withTimeout(client.execute(`PRAGMA table_info("${t}")`), timeoutMs, `スキーマ確認(${t})`);
+      const cols = rs.rows.map((r) => {
+        const obj = {};
+        rs.columns.forEach((c, i) => { obj[c] = r[i]; });
+        return obj.name;
+      });
+      schema[t] = cols.length > 0 ? cols : null;
+    } catch {
+      schema[t] = null;
+    }
+  }
+  return schema;
 }
 
 async function fetchTargetSnapshot(client, timeoutMs = 20000) {
@@ -181,7 +206,25 @@ async function restoreFromBackup(config) {
     }
     log("復元先が空であることを確認: OK");
 
-    // --- 3. 全テーブル・全行のINSERTを1つのbatch()にまとめ、原子的に実行する ---
+    // --- 3. スキーマ(列構成)がソースと一致することを、INSERT実行前に確認する ---
+    const targetSchema = await fetchTargetSchema(client, config.timeoutMs);
+    const schemaMismatches = [];
+    for (const t of TABLES_IN_FK_ORDER) {
+      if (source.tables[t] === null) continue; // ソースに存在しないテーブルは対象外
+      const sourceCols = source.tables[t].cols.slice().sort();
+      const targetCols = (targetSchema[t] ?? []).slice().sort();
+      if (JSON.stringify(sourceCols) !== JSON.stringify(targetCols)) {
+        schemaMismatches.push(t);
+      }
+    }
+    if (schemaMismatches.length > 0) {
+      log("RESULT=FAILURE");
+      log("復元先のテーブル構成がバックアップと一致しないため、書き込みを行わず中止します: " + schemaMismatches.join(", "));
+      return { success: false, reason: "schema-mismatch: " + schemaMismatches.join(",") };
+    }
+    log("スキーマ(列構成)の一致を確認: OK");
+
+    // --- 4. 全テーブル・全行のINSERTを1つのbatch()にまとめ、原子的に実行する ---
     const statements = [];
     for (const t of TABLES_IN_FK_ORDER) {
       if (source.tables[t] === null) continue; // ソースに存在しないテーブルは復元対象外
@@ -194,6 +237,12 @@ async function restoreFromBackup(config) {
       }
     }
 
+    if (statements.length > MAX_RESTORE_STATEMENTS) {
+      log("RESULT=FAILURE");
+      log(`書き込み行数(${statements.length})が安全上限(${MAX_RESTORE_STATEMENTS}、未確認だが保守的な目安)を超えるため中止します。分割実行の方式を検討してください。`);
+      return { success: false, reason: "too-many-statements" };
+    }
+
     if (statements.length === 0) {
       log("復元対象のデータが0件のため、書き込みは発生しません。");
     } else {
@@ -201,7 +250,7 @@ async function restoreFromBackup(config) {
       log(`復元書き込み: OK(${statements.length}行、1トランザクション)`);
     }
 
-    // --- 4. 復元後の内容を再取得し、ソースと比較する ---
+    // --- 5. 復元後の内容を再取得し、ソースと比較する ---
     const targetSnapshot = await fetchTargetSnapshot(client, config.timeoutMs);
     const mismatches = [];
     for (const t of TABLES_IN_FK_ORDER) {
@@ -237,7 +286,17 @@ async function restoreFromBackup(config) {
   }
 }
 
-module.exports = { restoreFromBackup, readSourceBackup, verifyTargetIsEmpty, fetchTargetSnapshot, canonicalValue, rowHash, TABLES_IN_FK_ORDER };
+module.exports = {
+  restoreFromBackup,
+  readSourceBackup,
+  verifyTargetIsEmpty,
+  fetchTargetSchema,
+  fetchTargetSnapshot,
+  canonicalValue,
+  rowHash,
+  TABLES_IN_FK_ORDER,
+  MAX_RESTORE_STATEMENTS,
+};
 
 if (require.main === module) {
   restoreFromBackup({

@@ -152,6 +152,46 @@ test("統合: 復元先に既存データが1件でもあれば、書き込み�
   }
 });
 
+test("統合: 復元先のテーブル構成(列)がバックアップと異なる場合、書き込みを行わず中止する", async () => {
+  const dir = os.tmpdir();
+  const backupPath = path.join(dir, `restore-test-backup3-${Date.now()}.db`);
+  const targetPath = path.join(dir, `restore-test-target3-${Date.now()}.db`);
+  await buildSyntheticBackup(backupPath);
+
+  // ターゲットは同じテーブル名だが、Memoの列構成が異なる(sourceKeyが無い)状態を用意する。
+  const targetClient = createClient({ url: `file:${targetPath}` });
+  await targetClient.executeMultiple(`
+    CREATE TABLE "Category" ("id" TEXT NOT NULL PRIMARY KEY, "key" TEXT NOT NULL UNIQUE, "label" TEXT NOT NULL, "color" TEXT NOT NULL, "sortOrder" INTEGER NOT NULL DEFAULT 0, "longTermPlan" TEXT NOT NULL DEFAULT '', "createdAt" DATETIME NOT NULL);
+    CREATE TABLE "RoadmapItem" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL, "categoryId" TEXT NOT NULL, "requiredSkills" TEXT NOT NULL, "updatedAt" DATETIME NOT NULL);
+    CREATE TABLE "KeyAction" ("id" TEXT NOT NULL PRIMARY KEY, "roadmapItemId" TEXT NOT NULL, "title" TEXT NOT NULL, "updatedAt" DATETIME NOT NULL);
+    CREATE TABLE "Memo" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL, "content" TEXT NOT NULL, "updatedAt" DATETIME NOT NULL);
+  `);
+  targetClient.close();
+
+  const logs = [];
+  const r = await restoreFromBackup({
+    backupPath,
+    targetUrl: `file:${targetPath}`,
+    targetToken: "unused-for-local-file",
+    expectedHostSubstring: path.basename(targetPath),
+    log: (m) => logs.push(m),
+  });
+
+  assert.equal(r.success, false);
+  assert.match(r.reason, /schema-mismatch/);
+  assert.match(r.reason, /Memo/);
+
+  // 書き込みが一切行われていないことを確認する。
+  const verifyClient = createClient({ url: `file:${targetPath}` });
+  const rows = await verifyClient.execute(`SELECT COUNT(*) as c FROM "Memo"`);
+  verifyClient.close();
+  assert.equal(Number(rows.rows[0][0]), 0);
+
+  for (const p of [backupPath, targetPath]) {
+    for (const suffix of ["", "-wal", "-shm"]) { try { fs.unlinkSync(p + suffix); } catch {} }
+  }
+});
+
 test("統合: 破損した(integrity_checkが失敗する)バックアップファイルからは復元を実行しない", async () => {
   const dir = os.tmpdir();
   const fakeBackupPath = path.join(dir, `restore-test-corrupt-${Date.now()}.db`);
