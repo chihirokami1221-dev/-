@@ -1,0 +1,9 @@
+{
+  "name": "turso-verify",
+  "version": "0.0.0",
+  "private": true,
+  "description": "backup-sqlite.cjs/turso-sync-backup.cjsとは完全に独立した、@libsql/client新バージョンの検証専用環境。メインアプリのpackage.json・node_modulesには一切影響しない。",
+  "dependencies": {
+    "@libsql/client": "0.18.0"
+  }
+}
