@@ -3,8 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { roadmapItemUpdateSchema } from "@/lib/validation";
 import { syncProgressWithStatus } from "@/lib/roadmapProgress";
 import { syncIndividualGoalsForPhase } from "@/lib/keyActionSync";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { id } = await params;
   const item = await prisma.roadmapItem.findUnique({ where: { id }, include: { category: true } });
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -12,6 +16,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const { id } = await params;
   const body = await req.json();
   const parsed = roadmapItemUpdateSchema.safeParse(body);
@@ -39,7 +48,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const { id } = await params;
   await prisma.roadmapItem.delete({ where: { id } });
   return NextResponse.json({ ok: true });

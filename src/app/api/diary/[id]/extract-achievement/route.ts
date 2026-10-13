@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { chatWithOllama } from "@/lib/ollama";
+import { chatWithOllama, isAiDisabled } from "@/lib/ollama";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
 interface AchievementDraft {
   title: string;
@@ -38,7 +39,15 @@ function parseDraft(raw: string): AchievementDraft | null {
 
 // 日記の内容から実績候補(未確定)を抽出するだけのエンドポイント。ここではDBに何も保存しない。
 // ユーザーが確認・編集し、実績登録フォームで明示的に保存して初めて実績として確定する(無条件加点を防ぐ)。
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+  if (isAiDisabled()) {
+    return NextResponse.json({ error: "AI機能はWeb版では利用できません。ローカル版でご利用ください。" }, { status: 503 });
+  }
+
   const { id } = await params;
   const entry = await prisma.diaryEntry.findUnique({ where: { id }, include: { category: true } });
   if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });

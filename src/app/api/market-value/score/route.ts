@@ -1,10 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { computeMarketValue } from "@/lib/marketValue/score";
 import { evaluateStage } from "@/lib/marketValue/stages";
 import { buildAxisSnapshotMap, buildReasonNote, AxisSnapshotMap } from "@/lib/marketValue/history";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const data = await computeMarketValue();
   const stageEval = evaluateStage(data);
   const latestSnapshot = await prisma.marketValueScoreSnapshot.findFirst({
@@ -20,7 +24,12 @@ export async function GET() {
 }
 
 // 「スコアを更新」操作時にスナップショットを保存する(閲覧のたびに自動保存はしない)。
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const data = await computeMarketValue();
   const stageEval = evaluateStage(data);
 

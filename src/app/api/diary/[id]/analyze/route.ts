@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { chatWithOllama } from "@/lib/ollama";
+import { chatWithOllama, isAiDisabled } from "@/lib/ollama";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+  if (isAiDisabled()) {
+    return NextResponse.json({ error: "AI機能はWeb版では利用できません。ローカル版でご利用ください。" }, { status: 503 });
+  }
+
   const { id } = await params;
   const entry = await prisma.diaryEntry.findUnique({ where: { id }, include: { category: true } });
   if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });

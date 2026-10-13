@@ -3,6 +3,13 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5:7b";
 // AIチャットは対話の応答速度を優先し、日記分析・実績抽出より軽いモデルを使う。
 const OLLAMA_CHAT_MODEL = process.env.OLLAMA_CHAT_MODEL ?? OLLAMA_MODEL;
 
+// Web版(Vercel等)にはローカルのOllamaが存在しないため、AI機能はWeb環境でのみ無効化する。
+// 未設定(ローカル開発環境)の場合は常にfalse=有効のまま動作し、ローカル版の挙動は変更しない。
+// Vercel側の環境変数でのみ"true"を設定する想定(.envには追加しない)。
+export function isAiDisabled(): boolean {
+  return process.env.AI_FEATURES_DISABLED === "true";
+}
+
 export interface OllamaChatMessage {
   role: "system" | "user" | "assistant";
   content: string;

@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { keyActionUpdateSchema } from "@/lib/validation";
 import { syncIndividualGoalsForPhase } from "@/lib/keyActionSync";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const { id } = await params;
   const body = await req.json();
   const parsed = keyActionUpdateSchema.safeParse(body);
@@ -22,7 +28,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // 重点行動は物理削除せず、論理削除(archived=true)にする。
 // 派生した個別目標・実績・Weekly ToDoの履歴を保護するため(syncIndividualGoalsForPhaseが安全に後処理する)。
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const { id } = await params;
   const existing = await prisma.keyAction.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });

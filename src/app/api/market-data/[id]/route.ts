@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { marketDataUpdateSchema } from "@/lib/validation";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { id } = await params;
   const entry = await prisma.marketDataEntry.findUnique({ where: { id } });
   if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -10,6 +14,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const { id } = await params;
   const body = await req.json();
   const parsed = marketDataUpdateSchema.safeParse(body);
@@ -21,7 +30,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const { id } = await params;
   await prisma.marketDataEntry.delete({ where: { id } });
   return NextResponse.json({ ok: true });

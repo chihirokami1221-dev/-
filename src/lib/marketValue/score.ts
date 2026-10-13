@@ -59,7 +59,7 @@ function toEvidence(a: AchievementWithLinks): AxisEvidenceItem {
 
 // 専門スキル・実績成果・再現性・第三者評価は、axisLinks(実績登録時のタグ付け)が唯一の根拠。
 // チェックボックス等の別フラグは持たず、タグ付けそのものがユーザーの意思表示となる。
-function evalSpecialistSkill(achievements: AchievementWithLinks[]): AxisScoreResult {
+export function evalSpecialistSkill(achievements: AchievementWithLinks[]): AxisScoreResult {
   const linked = linkedTo(achievements, "specialist_skill");
   const reproducible = linked.filter((a) => a.axisLinks.some((l) => l.axisKey === "reproducibility"));
 
@@ -93,7 +93,7 @@ function evalSpecialistSkill(achievements: AchievementWithLinks[]): AxisScoreRes
   };
 }
 
-function evalAchievementResult(achievements: AchievementWithLinks[]): AxisScoreResult {
+export function evalAchievementResult(achievements: AchievementWithLinks[]): AxisScoreResult {
   const linked = linkedTo(achievements, "achievement_result");
   const quantified = linked.filter((a) => (a.metricValue ?? "").trim() !== "" || a.revenueAmount !== null);
   const monetized = linked.filter(isMonetized);
@@ -127,7 +127,7 @@ function evalAchievementResult(achievements: AchievementWithLinks[]): AxisScoreR
   };
 }
 
-function evalReproducibility(achievements: AchievementWithLinks[]): AxisScoreResult {
+export function evalReproducibility(achievements: AchievementWithLinks[]): AxisScoreResult {
   const linked = linkedTo(achievements, "reproducibility");
 
   if (linked.length === 0) {
@@ -157,7 +157,7 @@ function evalReproducibility(achievements: AchievementWithLinks[]): AxisScoreRes
   };
 }
 
-function evalThirdPartyEvaluation(achievements: AchievementWithLinks[]): AxisScoreResult {
+export function evalThirdPartyEvaluation(achievements: AchievementWithLinks[]): AxisScoreResult {
   const linked = linkedTo(achievements, "third_party_evaluation");
   const valid = linked.filter((a) => a.thirdPartyFeedback.trim() !== "");
 

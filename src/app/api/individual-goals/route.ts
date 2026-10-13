@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { individualGoalCreateSchema } from "@/lib/validation";
 import { monthStartOfDate } from "@/lib/monthOptions";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const categoryId = req.nextUrl.searchParams.get("categoryId") ?? undefined;
   const month = req.nextUrl.searchParams.get("month") ?? undefined; // YYYY-MM-01 (targetMonthの厳密一致)
 
@@ -23,6 +27,11 @@ export async function GET(req: NextRequest) {
 // ロードマップの重点行動からの自動生成とは別に、ユーザーが直接個別目標を登録するためのエンドポイント。
 // roadmapItemId/keyActionIdをnullのまま作成し、manuallyEdited=trueにすることで自動同期の上書き対象から外す。
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const body = await req.json();
   const parsed = individualGoalCreateSchema.safeParse(body);
   if (!parsed.success) {

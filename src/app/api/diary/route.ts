@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { diaryEntrySchema } from "@/lib/validation";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const categoryId = req.nextUrl.searchParams.get("categoryId") ?? undefined;
   const keyword = req.nextUrl.searchParams.get("keyword") ?? undefined;
   const month = req.nextUrl.searchParams.get("month") ?? undefined; // YYYY-MM
@@ -30,6 +34,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const body = await req.json();
   const parsed = diaryEntrySchema.safeParse(body);
   if (!parsed.success) {

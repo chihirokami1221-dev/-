@@ -1,10 +1,29 @@
 import { NextRequest } from "next/server";
-import { streamChatWithOllama, type OllamaChatMessage } from "@/lib/ollama";
+import { streamChatWithOllama, isAiDisabled, type OllamaChatMessage } from "@/lib/ollama";
 import { buildChatSystemPrompt } from "@/lib/chatContext";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
 const MAX_HISTORY = 20;
+const AI_DISABLED_MESSAGE = "AI機能はWeb版では利用できません。ローカル版でご利用ください。";
+
+function aiDisabledStreamResponse() {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(AI_DISABLED_MESSAGE));
+      controller.close();
+    },
+  });
+  return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+}
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+  if (isAiDisabled()) return aiDisabledStreamResponse();
+
   const body = await req.json();
   const messages = Array.isArray(body?.messages) ? (body.messages as OllamaChatMessage[]) : [];
   const history = messages

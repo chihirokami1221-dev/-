@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { keyActionSchema } from "@/lib/validation";
 import { syncIndividualGoalsForPhase } from "@/lib/keyActionSync";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const roadmapItemId = req.nextUrl.searchParams.get("roadmapItemId") ?? undefined;
   const actions = await prisma.keyAction.findMany({
     where: { roadmapItemId: roadmapItemId || undefined, archived: false },
@@ -13,6 +17,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const body = await req.json();
   const parsed = keyActionSchema.safeParse(body);
   if (!parsed.success) {

@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { weeklyTodoSchema } from "@/lib/validation";
 import { getStartOfWeek } from "@/lib/weekUtils";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const weekParam = req.nextUrl.searchParams.get("weekStart");
   const weekStart = weekParam ? new Date(weekParam) : getStartOfWeek(new Date());
 
@@ -16,6 +20,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const body = await req.json();
   const parsed = weeklyTodoSchema.safeParse(body);
 

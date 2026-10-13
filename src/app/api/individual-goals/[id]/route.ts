@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { individualGoalUpdateSchema } from "@/lib/validation";
 import { syncProgressWithStatus } from "@/lib/roadmapProgress";
+import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   const { id } = await params;
   const goal = await prisma.individualGoal.findUnique({
     where: { id },
@@ -16,6 +20,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // このAPI経由の更新は、すべてユーザーによる手動操作とみなしmanuallyEdited=trueにする
 // (自動同期エンジンはこのAPIを経由せずPrismaを直接呼ぶため、ここを通る時点で手動編集として保護対象になる)。
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const { id } = await params;
   const body = await req.json();
   const parsed = individualGoalUpdateSchema.safeParse(body);
@@ -40,7 +49,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 // 物理削除せず論理削除(syncDeleted=true)する。同期処理が次回以降このIDを復活させないようにするため。
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  const csrfError = requireSameOrigin(req);
+  if (csrfError) return csrfError;
+
   const { id } = await params;
   const existing = await prisma.individualGoal.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
