@@ -11,6 +11,9 @@ const STALE_DAYS = 90;
 export default async function MarketDataPage() {
   await connection();
   const entries = await prisma.marketDataEntry.findMany({ orderBy: { fetchedAt: "desc" } });
+  // このページはconnection()により常に動的レンダリングされる(キャッシュされない)ため、
+  // リクエストごとにDate.now()を評価することは意図した挙動であり安全。
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
   return (

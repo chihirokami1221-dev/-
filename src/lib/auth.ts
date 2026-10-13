@@ -116,6 +116,75 @@ export function isSameOriginRequest(req: Request): boolean {
   return false;
 }
 
+// --- ログイン試行回数制限(総当たり対策) ---
+// サーバーレス環境(Vercel等)ではインスタンスごとのメモリ内カウンターが共有されないため、
+// 代わりにクライアント側のHMAC署名付きCookieに「直近の失敗回数+ウィンドウ開始時刻」を
+// 持たせる(DBやKVストアを新設しない、無料・既存の仕組みだけで動く方式)。
+// 署名検証に落ちた/存在しない場合は「失敗0回」として扱う(fail-open)。これは意図した設計で、
+// セッションCookieのような本来の認証境界ではなく、あくまで総当たりを遅くするための
+// 軽い抑止策であるため。Cookieを消せば回避できる点は既知の限界として残る。
+export const LOGIN_ATTEMPT_COOKIE_NAME = "growth_os_login_attempts";
+const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000; // 15分
+export const LOGIN_ATTEMPT_MAX = 5;
+
+export interface LoginAttemptState {
+  count: number;
+  windowStart: number;
+}
+
+function freshAttemptState(): LoginAttemptState {
+  return { count: 0, windowStart: Date.now() };
+}
+
+export function buildLoginAttemptCookieValue(state: LoginAttemptState): string {
+  const payload = `${state.count}.${state.windowStart}`;
+  const signature = sign(payload);
+  return `${payload}.${signature}`;
+}
+
+export function readLoginAttemptState(value: string | undefined): LoginAttemptState {
+  if (!value) return freshAttemptState();
+  const parts = value.split(".");
+  if (parts.length !== 3) return freshAttemptState();
+  const [countStr, windowStartStr, signature] = parts;
+  const payload = `${countStr}.${windowStartStr}`;
+
+  let expectedSignature: string;
+  try {
+    expectedSignature = sign(payload);
+  } catch (error) {
+    logAuthConfigError("readLoginAttemptState", error);
+    return freshAttemptState();
+  }
+
+  const sigBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+    return freshAttemptState();
+  }
+
+  const count = Number(countStr);
+  const windowStart = Number(windowStartStr);
+  if (!Number.isFinite(count) || !Number.isFinite(windowStart)) return freshAttemptState();
+
+  // ウィンドウ期間を過ぎていれば、新しいウィンドウとして数え直す。
+  if (Date.now() - windowStart > LOGIN_ATTEMPT_WINDOW_MS) return freshAttemptState();
+
+  return { count, windowStart };
+}
+
+export function isLoginRateLimited(state: LoginAttemptState): boolean {
+  return state.count >= LOGIN_ATTEMPT_MAX;
+}
+
+export function recordFailedLoginAttempt(state: LoginAttemptState): LoginAttemptState {
+  // ウィンドウが切れていれば、失敗1回目として新しいウィンドウを開始する。
+  if (Date.now() - state.windowStart > LOGIN_ATTEMPT_WINDOW_MS) {
+    return { count: 1, windowStart: Date.now() };
+  }
+  return { count: state.count + 1, windowStart: state.windowStart };
+}
+
 // APIルート先頭で呼ぶだけで済む共通ガード。未認証なら401レスポンスを返し、呼び出し側はそれをreturnする。
 export function requireAuth(req: NextRequest): NextResponse | null {
   if (isAuthenticatedRequest(req)) return null;

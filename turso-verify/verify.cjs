@@ -118,11 +118,11 @@ async function testRealSync() {
   } catch (e) {
     console.log("RESULT(実同期)=FAILURE");
     console.log("同期エラー: " + e.message.split("\n")[0]);
-    try { replicaClient && replicaClient.close(); } catch {}
+    try { if (replicaClient) replicaClient.close(); } catch {}
     await cleanupAll(replicaPath);
     return false;
   } finally {
-    try { replicaClient && replicaClient.close(); } catch {}
+    try { if (replicaClient) replicaClient.close(); } catch {}
   }
 
   // クローズ後、本体+付随ファイルを別名でコピーして独立したスナップショットとする。

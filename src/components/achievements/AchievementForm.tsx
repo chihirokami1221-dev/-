@@ -92,9 +92,10 @@ export function AchievementForm({
   const [revenueAmount, setRevenueAmount] = useState(
     initial?.revenueAmount !== undefined && initial?.revenueAmount !== null ? String(initial.revenueAmount) : ""
   );
-  const [revenueCurrency, setRevenueCurrency] = useState(initial?.revenueCurrency ?? "JPY");
-  const [revenueType, setRevenueType] = useState<RevenueType>(initial?.revenueType ?? "SALES");
-  const [revenuePeriod, setRevenuePeriod] = useState(initial?.revenuePeriod ?? "");
+  // 収益の通貨・種別・期間はUI入力欄が無く(金額のみに簡略化済み)、初期値をそのまま保存時に送るだけ。
+  const [revenueCurrency] = useState(initial?.revenueCurrency ?? "JPY");
+  const [revenueType] = useState<RevenueType>(initial?.revenueType ?? "SALES");
+  const [revenuePeriod] = useState(initial?.revenuePeriod ?? "");
   const [evidenceUrl, setEvidenceUrl] = useState(initial?.evidenceUrl ?? "");
   const [evidenceNote, setEvidenceNote] = useState(initial?.evidenceNote ?? "");
   const [date, setDate] = useState(toDateInputValue(initial?.date));
@@ -117,6 +118,9 @@ export function AchievementForm({
 
     try {
       const draft: AchievementDraft = JSON.parse(raw);
+      // sessionStorageからの一度だけの読み込み(外部ストアとの同期)であり、
+      // propから派生させた状態をミラーしているわけではないため、effect内でのstate設定が正しい用法。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (draft.title) setTitle(draft.title);
       if (draft.challenge) setChallenge(draft.challenge);
       if (draft.action) setAction(draft.action);

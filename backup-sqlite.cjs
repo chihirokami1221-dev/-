@@ -152,7 +152,7 @@ async function main() {
     try {
       fs.unlinkSync(backupPath);
       console.log("ログファイル名を確保できなかったため、直前に確保したバックアップ用の空ファイルを解放しました: " + backupPath);
-    } catch (e) {
+    } catch {
       console.log("バックアップ用の空ファイルの解放に失敗しました(手動確認が必要な場合があります): " + backupPath);
     }
     stop(logReserve.reason, srcDb);

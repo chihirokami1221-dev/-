@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -61,6 +61,15 @@ export function WeeklyTodoList({
 }) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
+  // initialItems(サーバーから渡される最新データ)が変わった時点でitemsへ反映する。
+  // useEffectではなく、レンダー中にstateを直接調整する(Reactが公式に推奨する
+  // 「propが変わったらstateを調整する」パターン)ことで、1回余分な再レンダーが
+  // 発生する問題を避ける。
+  const [prevInitialItems, setPrevInitialItems] = useState(initialItems);
+  if (initialItems !== prevInitialItems) {
+    setPrevInitialItems(initialItems);
+    setItems(initialItems);
+  }
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -69,10 +78,6 @@ export function WeeklyTodoList({
   const [error, setError] = useState<string | null>(null);
 
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-
-  useEffect(() => {
-    setItems(initialItems);
-  }, [initialItems]);
 
   // 優先事項・ダッシュボードなど同じページ内の他セクションはサーバーで再計算されるため、
   // 保存成功のたびにrouter.refresh()でページ全体のサーバーデータを更新する。

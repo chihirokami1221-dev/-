@@ -13,6 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // バックアップ専用スクリプトはNode.js標準のCommonJS(require)で動作確認済みであり、
+    // ES Modulesへ変更する必要はない。ここでルールだけ無効化する。
+    files: ["*.cjs", "turso-verify/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

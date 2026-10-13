@@ -6,6 +6,11 @@ import {
   createSessionCookieValue,
   verifySessionCookieValue,
   isSameOriginRequest,
+  readLoginAttemptState,
+  isLoginRateLimited,
+  recordFailedLoginAttempt,
+  buildLoginAttemptCookieValue,
+  LOGIN_ATTEMPT_MAX,
 } from "./auth";
 
 // このファイルはテスト専用のダミーのsalt/hash/secretだけを使う。
@@ -75,6 +80,51 @@ test("isSameOriginRequest: Origin無しでもRefererが一致すればtrue", () 
     headers: { referer: "http://localhost:3000/some-page", host: "localhost:3000" },
   });
   assert.equal(isSameOriginRequest(req), true);
+});
+
+// --- ログイン試行回数制限 ---
+
+test("readLoginAttemptState: Cookie無しは失敗0回の新規状態", () => {
+  const state = readLoginAttemptState(undefined);
+  assert.equal(state.count, 0);
+  assert.equal(isLoginRateLimited(state), false);
+});
+
+test("readLoginAttemptState: 改ざんされたCookieは失敗0回扱い(fail-open、既知の限界)", () => {
+  const state = readLoginAttemptState("999.1.deadbeef");
+  assert.equal(state.count, 0);
+});
+
+test("recordFailedLoginAttempt: LOGIN_ATTEMPT_MAX回失敗するとレート制限される", () => {
+  let state = readLoginAttemptState(undefined);
+  for (let i = 0; i < LOGIN_ATTEMPT_MAX - 1; i++) {
+    state = recordFailedLoginAttempt(state);
+    assert.equal(isLoginRateLimited(state), false, `${i + 1}回目ではまだ制限されないはず`);
+  }
+  state = recordFailedLoginAttempt(state);
+  assert.equal(isLoginRateLimited(state), true, `${LOGIN_ATTEMPT_MAX}回目で制限されるはず`);
+});
+
+test("buildLoginAttemptCookieValue -> readLoginAttemptState: 往復で値が保持される", () => {
+  const state = recordFailedLoginAttempt(readLoginAttemptState(undefined));
+  const cookie = buildLoginAttemptCookieValue(state);
+  const parsed = readLoginAttemptState(cookie);
+  assert.equal(parsed.count, state.count);
+  assert.equal(parsed.windowStart, state.windowStart);
+});
+
+test("recordFailedLoginAttempt: ウィンドウ(15分)が過ぎていれば1回目として数え直す", () => {
+  const oldState = { count: LOGIN_ATTEMPT_MAX, windowStart: Date.now() - 16 * 60 * 1000 };
+  const next = recordFailedLoginAttempt(oldState);
+  assert.equal(next.count, 1);
+  assert.equal(isLoginRateLimited(next), false);
+});
+
+test("readLoginAttemptState: ウィンドウが切れたCookieは失敗0回として読み直される", () => {
+  const oldPayload = `${LOGIN_ATTEMPT_MAX}.${Date.now() - 16 * 60 * 1000}`;
+  const signature = crypto.createHmac("sha256", FAKE_SESSION_SECRET).update(oldPayload).digest("hex");
+  const state = readLoginAttemptState(`${oldPayload}.${signature}`);
+  assert.equal(state.count, 0);
 });
 
 test("fail-closed: AUTH_SESSION_SECRET未設定時、verifySessionCookieValueは例外を投げずfalseを返す", async () => {

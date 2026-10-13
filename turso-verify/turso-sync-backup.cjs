@@ -307,11 +307,11 @@ async function runTursoSyncBackup(config) {
   } catch (e) {
     log("RESULT=FAILURE");
     log("Embedded Replicaへの同期に失敗しました: " + e.message.split("\n")[0]);
-    try { replicaClient && replicaClient.close(); } catch {}
+    try { if (replicaClient) replicaClient.close(); } catch {}
     logCleanupResult(log, await cleanupSiblings(replicaPath));
     return { success: false, reason: "sync-failed: " + e.message.split("\n")[0] };
   } finally {
-    try { replicaClient && replicaClient.close(); } catch {}
+    try { if (replicaClient) replicaClient.close(); } catch {}
   }
 
   // --- 3. 完全にクローズした後、元のレプリカファイルには一切触れず、別名でコピーする ---
