@@ -24,6 +24,16 @@ export const BOOK_RECOMMENDATIONS: Record<string, BookRecommendation[]> = {
       author: "森岡毅",
       reason: "マーケティングで事業をV字回復させた実例から学べる一冊。",
     },
+    {
+      title: "コトラーのマーケティング入門(原書14版)",
+      author: "フィリップ・コトラー、ゲイリー・アームストロング",
+      reason: "「近代マーケティングの父」コトラーによる定番の入門書。",
+    },
+    {
+      title: "シュガーマンのマーケティング30の法則",
+      author: "ジョセフ・シュガーマン",
+      reason: "消費者心理や購買行動を実例から解説する、接客・販売にも応用できる一冊。",
+    },
   ],
   side_job: [
     {
@@ -41,6 +51,16 @@ export const BOOK_RECOMMENDATIONS: Record<string, BookRecommendation[]> = {
       author: "メンタリストDaiGo",
       reason: "文章で相手の心を動かすための心理トリガーを解説。",
     },
+    {
+      title: "ゼロ・トゥ・ワン",
+      author: "ピーター・ティール",
+      reason: "「競争ではなく独占を目指す」という、新しい事業を生み出す考え方を学べる一冊。",
+    },
+    {
+      title: "もし高校野球の女子マネージャーがドラッカーの『マネジメント』を読んだら",
+      author: "岩崎夏海",
+      reason: "ドラッカーの経営理論を物語形式でわかりやすく学べる、副業・小規模事業にも使える入門書。",
+    },
   ],
   music: [
     {
@@ -52,6 +72,16 @@ export const BOOK_RECOMMENDATIONS: Record<string, BookRecommendation[]> = {
       title: "音楽の聴き方",
       author: "岡田暁生",
       reason: "音楽を聴くとはどういう行為かを問い直す一冊。",
+    },
+    {
+      title: "西洋音楽史",
+      author: "岡田暁生",
+      reason: "クラシック音楽の歴史を一冊で見通せる定番の新書。",
+    },
+    {
+      title: "「医師」と「声楽家」が解き明かす 発声のメカニズム",
+      author: "萩野仁志、後野仁彦",
+      reason: "医学と声楽の両方の視点から、発声の仕組みを解説したベストセラー。",
     },
   ],
 };
