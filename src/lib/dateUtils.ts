@@ -15,6 +15,58 @@ export function getJstDayOfYear(date: Date): number {
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
 
+// 1970-01-01からの「JST基準の経過日数」。年をまたいでも連続して増え続けるため、
+// 年初に巡回がリセットされない(getJstDayOfYearは年初で0に戻ってしまう)。
+export function getJstEpochDay(date: Date): number {
+  return Math.floor((date.getTime() + JST_OFFSET_MS) / (1000 * 60 * 60 * 24));
+}
+
+// 決定的な疑似乱数生成器(mulberry32)。Math.random()は再現性が無く、サーバー再起動
+// やリクエストごとに結果が変わってしまうため使わない。
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return function rand() {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashSeed(s: string): number {
+  let h = 2166136261; // FNV-1aの初期値
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function shuffledIndices(length: number, seed: number): number[] {
+  const rand = mulberry32(seed);
+  const arr = Array.from({ length }, (_, i) => i);
+  for (let i = length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// リスト内の全件(listLength件)を表示し終えるまでの1周回の中では、絶対に同じ項目を
+// 重複して出さない(シャッフルした順で1件ずつ消費する)。周回が変わるとシャッフル順も
+// 変わるため、単純な「日数 % 件数」のような固定巡回パターンにもならない。
+// ただし、リストの件数は有限なので、1周回(listLength日)を超えて続けた場合、
+// 技術的に過去に表示した項目が再登場すること自体は避けられない
+// (例: 本が3冊しかない場合、4日目以降は必ずどれかの再登場になる)。
+export function getNoRepeatDailyIndex(date: Date, listLength: number, salt: string): number {
+  if (listLength <= 0) return 0;
+  const epochDay = getJstEpochDay(date);
+  const cycle = Math.floor(epochDay / listLength);
+  const position = epochDay % listLength;
+  const seed = (hashSeed(salt) ^ cycle) >>> 0;
+  return shuffledIndices(listLength, seed)[position];
+}
+
 export function formatJP(date: Date): string {
   return new Intl.DateTimeFormat("ja-JP", {
     year: "numeric",

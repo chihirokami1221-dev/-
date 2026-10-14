@@ -1,4 +1,4 @@
-import { getJstDayOfYear } from "@/lib/dateUtils";
+import { getNoRepeatDailyIndex } from "@/lib/dateUtils";
 
 export interface BookRecommendation {
   title: string;
@@ -60,8 +60,8 @@ export function getTodayBook(categoryKey: string, date: Date = new Date()): Book
   const list = BOOK_RECOMMENDATIONS[categoryKey];
   if (!list || list.length === 0) return null;
 
-  const dayOfYear = getJstDayOfYear(date);
-  return list[dayOfYear % list.length];
+  const index = getNoRepeatDailyIndex(date, list.length, `book:${categoryKey}`);
+  return list[index];
 }
 
 interface CategoryLike {

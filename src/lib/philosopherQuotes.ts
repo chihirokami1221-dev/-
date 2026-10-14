@@ -1,4 +1,4 @@
-import { getJstDayOfYear } from "@/lib/dateUtils";
+import { getNoRepeatDailyIndex } from "@/lib/dateUtils";
 
 export interface PhilosopherQuote {
   text: string;
@@ -61,6 +61,6 @@ export const PHILOSOPHER_QUOTES: PhilosopherQuote[] = [
 ];
 
 export function getTodayQuote(date: Date = new Date()): PhilosopherQuote {
-  const dayOfYear = getJstDayOfYear(date);
-  return PHILOSOPHER_QUOTES[dayOfYear % PHILOSOPHER_QUOTES.length];
+  const index = getNoRepeatDailyIndex(date, PHILOSOPHER_QUOTES.length, "philosopher-quote");
+  return PHILOSOPHER_QUOTES[index];
 }

@@ -1,4 +1,4 @@
-import { getJstDayOfYear } from "@/lib/dateUtils";
+import { getNoRepeatDailyIndex } from "@/lib/dateUtils";
 
 export interface EnglishWordEntry {
   word: string;
@@ -38,6 +38,6 @@ export const ENGLISH_WORDS: EnglishWordEntry[] = [
 ];
 
 export function getTodayWord(date: Date = new Date()): EnglishWordEntry {
-  const dayOfYear = getJstDayOfYear(date);
-  return ENGLISH_WORDS[dayOfYear % ENGLISH_WORDS.length];
+  const index = getNoRepeatDailyIndex(date, ENGLISH_WORDS.length, "daily-english-word");
+  return ENGLISH_WORDS[index];
 }
