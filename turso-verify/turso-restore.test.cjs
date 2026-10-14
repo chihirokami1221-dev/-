@@ -9,7 +9,7 @@ const path = require("node:path");
 const os = require("node:os");
 const { createClient } = require("@libsql/client");
 
-const { restoreFromBackup, verifyTargetIsEmpty, TABLES_IN_FK_ORDER } = require("./turso-restore.cjs");
+const { restoreFromBackup } = require("./turso-restore.cjs");
 
 async function buildSyntheticBackup(dbPath) {
   const client = createClient({ url: `file:${dbPath}` });

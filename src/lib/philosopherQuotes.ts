@@ -1,3 +1,5 @@
+import { getJstDayOfYear } from "@/lib/dateUtils";
+
 export interface PhilosopherQuote {
   text: string;
   author: string;
@@ -59,8 +61,6 @@ export const PHILOSOPHER_QUOTES: PhilosopherQuote[] = [
 ];
 
 export function getTodayQuote(date: Date = new Date()): PhilosopherQuote {
-  const start = new Date(date.getFullYear(), 0, 0);
-  const diff = date.getTime() - start.getTime();
-  const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const dayOfYear = getJstDayOfYear(date);
   return PHILOSOPHER_QUOTES[dayOfYear % PHILOSOPHER_QUOTES.length];
 }

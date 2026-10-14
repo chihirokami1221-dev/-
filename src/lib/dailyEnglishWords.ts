@@ -1,3 +1,5 @@
+import { getJstDayOfYear } from "@/lib/dateUtils";
+
 export interface EnglishWordEntry {
   word: string;
   meaning: string;
@@ -36,8 +38,6 @@ export const ENGLISH_WORDS: EnglishWordEntry[] = [
 ];
 
 export function getTodayWord(date: Date = new Date()): EnglishWordEntry {
-  const start = new Date(date.getFullYear(), 0, 0);
-  const diff = date.getTime() - start.getTime();
-  const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const dayOfYear = getJstDayOfYear(date);
   return ENGLISH_WORDS[dayOfYear % ENGLISH_WORDS.length];
 }

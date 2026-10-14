@@ -1,3 +1,5 @@
+import { getJstDayOfYear } from "@/lib/dateUtils";
+
 export interface BookRecommendation {
   title: string;
   author: string;
@@ -58,9 +60,7 @@ export function getTodayBook(categoryKey: string, date: Date = new Date()): Book
   const list = BOOK_RECOMMENDATIONS[categoryKey];
   if (!list || list.length === 0) return null;
 
-  const start = new Date(date.getFullYear(), 0, 0);
-  const diff = date.getTime() - start.getTime();
-  const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const dayOfYear = getJstDayOfYear(date);
   return list[dayOfYear % list.length];
 }
 
