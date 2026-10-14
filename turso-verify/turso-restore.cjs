@@ -298,11 +298,20 @@ module.exports = {
   MAX_RESTORE_STATEMENTS,
 };
 
+// .envファイルへの貼り付け時に、括弧・引用符が誤って前後に残ってしまうことがあるため
+// (実際に発生した)、値の前後だけを安全に取り除く。値の中身は変更しない。
+function cleanEnvValue(v) {
+  if (!v) return v;
+  return v.trim().replace(/^[("']+/, "").replace(/[)"']+$/, "");
+}
+
 if (require.main === module) {
+  // 既存のturso-sync-backup.cjs/verify.cjsと同じ環境変数名(TURSO_TEST_*)を使う。
+  // 対象DBが本番ではなく検証用DBであることを示す命名として、CLI利用時はそのまま踏襲する。
   restoreFromBackup({
     backupPath: process.argv[2],
-    targetUrl: process.env.TURSO_RESTORE_TARGET_URL,
-    targetToken: process.env.TURSO_RESTORE_TARGET_TOKEN,
+    targetUrl: cleanEnvValue(process.env.TURSO_TEST_DATABASE_URL || process.env.TURSO_RESTORE_TARGET_URL),
+    targetToken: cleanEnvValue(process.env.TURSO_TEST_READONLY_TOKEN || process.env.TURSO_RESTORE_TARGET_TOKEN),
     expectedHostSubstring: process.argv[3],
   })
     .then((r) => { process.exitCode = r.success ? 0 : 1; })

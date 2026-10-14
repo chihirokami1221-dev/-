@@ -407,10 +407,17 @@ module.exports = {
   TABLES,
 };
 
+// .envファイルへの貼り付け時に、括弧・引用符が誤って前後に残ってしまうことがあるため
+// (turso-restore.cjsの運用で実際に発生した)、値の前後だけを安全に取り除く。
+function cleanEnvValue(v) {
+  if (!v) return v;
+  return v.trim().replace(/^[("']+/, "").replace(/[)"']+$/, "");
+}
+
 if (require.main === module) {
   runTursoSyncBackup({
-    remoteUrl: process.env.TURSO_TEST_DATABASE_URL,
-    authToken: process.env.TURSO_TEST_READONLY_TOKEN,
+    remoteUrl: cleanEnvValue(process.env.TURSO_TEST_DATABASE_URL),
+    authToken: cleanEnvValue(process.env.TURSO_TEST_READONLY_TOKEN),
   })
     .then((r) => {
       process.exitCode = r.success ? 0 : 1;
