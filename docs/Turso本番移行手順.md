@@ -17,15 +17,27 @@
 ## 1. 本番用Turso DBの作成
 
 - Tursoダッシュボードで、本番用の新しいデータベースを作成する(名称例: `growth-os-prod`)。
-- **スキーマ適用方法の判断(重要)**: 検証用の2DB(`growth-os-test`・`growth-os-migration-test`)は、いずれも`init_from_schema.sql`を直接適用する方法で作られており、**`_prisma_migrations`テーブルが存在しない**ことを確認済み(読み取り専用調査で確認)。この方法のままだと、将来Prismaでスキーマ変更をする際に`prisma migrate deploy`が履歴を認識できず、正しく動作しない可能性がある。
-  - **推奨**: 本番DBだけは、`init_from_schema.sql`の直接適用ではなく、**`prisma migrate deploy`を本番DB(Tursoアダプタ経由)に対して実行**し、既存の13件のマイグレーションファイルを正規の手順で適用する。これにより`_prisma_migrations`に正しい履歴が残り、以後のスキーマ変更が通常のPrismaワークフローで行える。
+- **スキーマ適用方法の決定(確定・2026-10-16)**: 当初は`prisma migrate deploy`をTursoアダプタ経由で本番DBに直接実行する方式を検討したが、以下の理由で採用しなかった。
+  1. `prisma migrate deploy`をTursoアダプタ経由で実行した実績が無く、未検証のリスクがあった。
+  2. **実機検証の結果、`prisma/migrations`配下の13件の`migration.sql`をそのまま順番に再生しても、現在の`prisma/dev.db`の実際のスキーマとは一致しないことが判明した**(`AchievementAxisLink`等の一部カラム・`MarketDataEntry`テーブル・一部インデックスが`prisma db push`で追加され、対応する`migration.sql`に反映されていないため)。つまり13件のファイルは履行順序とchecksum計算には使えるが、CREATE TABLE文の再生だけでは本番スキーマを正しく作れない。
+  - **採用した方式**: `turso-verify/create-prod-schema.cjs`を使う。
+    - テーブル・インデックスのCREATE文は、13件のマイグレーションファイルを再生するのではなく、**現在の`prisma/dev.db`のsqlite_master(動いている正本のスキーマ)から直接抽出**して適用する(これにより本番スキーマが現在のアプリの実際の期待と完全一致することを保証する)。
+    - `_prisma_migrations`テーブルは標準のPrisma定義で作成し、13件の`migration.sql`それぞれのsha256 checksum(Prismaと同一の算出方法であることを実機で確認済み)を使って、「この13件は既に適用済み」という履歴だけを記録する(SQLの再実行はしない。Prismaの「既存DBへのベースライン化」と同じ考え方)。
+    - 実行前に、接続先に既存オブジェクトが1つも無いことを必ず確認し、1つでもあれば何も書き込まず中止する。
+    - ローカルの一時DBに対する検証(`turso-verify/create-prod-schema.test.cjs`)で、作成結果が`prisma/dev.db`のテーブル・インデックス定義と完全一致すること、`_prisma_migrations`が13件・正しいchecksumで記録されることを確認済み。
+  - **使い方(書き込み可能トークン発行後、承認を得てから実行)**:
+    ```powershell
+    cd "growth-osフォルダへのパス\turso-verify"
+    node --env-file=../.env.turso-prod-write.local create-prod-schema.cjs "growth-os-prod"
+    ```
+    (`.env.turso-prod-write.local`に`TURSO_PROD_WRITE_DATABASE_URL`・`TURSO_PROD_WRITE_AUTH_TOKEN`を設定する。既存の読み取り専用用の変数名`TURSO_TEST_DATABASE_URL`/`TURSO_TEST_READONLY_TOKEN`とは別名にして混同を防ぐ。第1引数は誤接続防止のための接続先ホスト名確認用文字列。)
   - この判断は本番DB作成時に一度だけ必要(検証用DBのやり方を踏襲しない)。
 - 作成後、全13テーブルが0件であることを確認する(`turso-restore.cjs`の`verifyTargetIsEmpty`相当のチェックで自動確認される)。
 
 ## 2. 接続トークンの発行・保管
 
-- **読み書き両方が必要**(移行時の書き込み・アプリ運用時のCRUD双方)なトークンを、本番DB用に新規発行する。
-- トークンは`.env`やVercelの環境変数にのみ保存し、チャット・ログ・Gitには一切記載しない。
+- **読み書き両方が必要**(スキーマ作成・移行時の書き込み・アプリ運用時のCRUD双方)なトークンを、本番DB用に新規発行する。
+- トークンは`.env.turso-prod-write.local`(変数名`TURSO_PROD_WRITE_DATABASE_URL`・`TURSO_PROD_WRITE_AUTH_TOKEN`)やVercelの環境変数にのみ保存し、チャット・ログ・Gitには一切記載しない。既存の読み取り専用トークン(`.env.turso-prod.local`)とはファイル・変数名を分け、混同を防ぐ。
 - 既存の検証用トークン(`growth-os-test`・`growth-os-migration-test`用)とは別物として管理する。
 
 ## 3. 移行直前のSQLiteバックアップ
@@ -80,5 +92,5 @@
 
 ## 未確定事項
 
-- 本番DB作成・トークン発行は、Tursoダッシュボードでの操作が必要(承認後に実施)。
-- `prisma migrate deploy`を実際にTursoアダプタ経由で本番DBへ実行した実績はまだない(ローカルSQLiteでの実行実績はあるが、Turso向けは未検証)。本番DB作成時に初めて試すことになる。
+- 本番DB作成・読み取り専用トークン発行は完了済み。書き込み可能トークンの発行は、Tursoダッシュボードでの操作が必要(承認後に実施)。
+- `create-prod-schema.cjs`・`turso-restore.cjs`とも、ローカル合成DBでの検証は完了しているが、実際のTurso本番DBへの書き込み実行はまだ行っていない(書き込み可能トークン発行・対象確認・承認後に実施)。
