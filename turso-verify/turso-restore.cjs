@@ -17,6 +17,7 @@
 const { createClient } = require("@libsql/client");
 const { DatabaseSync } = require("node:sqlite");
 const crypto = require("node:crypto");
+const { cleanEnvValue, validateCredentials, safeErrorMessage } = require("./env-safety.cjs");
 
 // backup-sqlite.cjs/turso-sync-backup.cjsと同じ13テーブル・FKを満たす順序
 // (Category等の参照先を先に書き込む)。
@@ -159,6 +160,19 @@ async function restoreFromBackup(config) {
     return { success: false, reason: "missing-host-confirmation" };
   }
 
+  // URL解析・接続を試みる前に、値の形式を検証する(値そのものはログに出さない)。
+  // 実際にあった事故: URLとトークンの値が入れ替わっていた際、URL解析エラーの
+  // メッセージに入力値がそのまま含まれ、ログに出力されてしまった。
+  // file:(ローカルファイル。テスト専用)は通常のURL/トークン形式チェック対象外とする。
+  if (!config.targetUrl.startsWith("file:")) {
+    const credCheck = validateCredentials(config.targetUrl, config.targetToken);
+    if (!credCheck.ok) {
+      log("RESULT=FAILURE");
+      log(credCheck.reason);
+      return { success: false, reason: "invalid-credential-format" };
+    }
+  }
+
   let hostname;
   try {
     const normalized = config.targetUrl.replace(/^libsql:/, "https:").replace(/^libsql/, "https");
@@ -169,7 +183,7 @@ async function restoreFromBackup(config) {
     hostname = parsed.protocol === "file:" ? parsed.pathname : parsed.hostname;
   } catch (e) {
     log("RESULT=FAILURE");
-    log("targetUrlを解析できませんでした: " + e.message);
+    log("targetUrlを解析できませんでした: " + safeErrorMessage(e, [config.targetUrl, config.targetToken]));
     return { success: false, reason: "invalid-url" };
   }
 
@@ -185,7 +199,7 @@ async function restoreFromBackup(config) {
     source = readSourceBackup(config.backupPath);
   } catch (e) {
     log("RESULT=FAILURE");
-    log("バックアップファイルの読み込みに失敗しました: " + e.message.split("\n")[0]);
+    log("バックアップファイルの読み込みに失敗しました: " + safeErrorMessage(e, [config.targetUrl, config.targetToken]));
     return { success: false, reason: "backup-read-failed" };
   }
   if (source.integrity !== "ok") {
@@ -279,8 +293,8 @@ async function restoreFromBackup(config) {
     return { success: true, reason: null };
   } catch (e) {
     log("RESULT=FAILURE");
-    log("復元処理中にエラーが発生しました(batch()の仕様により、書き込みは行われていないかロールバック済みです): " + e.message.split("\n")[0]);
-    return { success: false, reason: "restore-failed: " + e.message.split("\n")[0] };
+    log("復元処理中にエラーが発生しました(batch()の仕様により、書き込みは行われていないかロールバック済みです): " + safeErrorMessage(e, [config.targetUrl, config.targetToken]));
+    return { success: false, reason: "restore-failed: " + safeErrorMessage(e, [config.targetUrl, config.targetToken]) };
   } finally {
     try { client.close(); } catch {}
   }
@@ -298,26 +312,21 @@ module.exports = {
   MAX_RESTORE_STATEMENTS,
 };
 
-// .envファイルへの貼り付け時に、括弧・引用符が誤って前後に残ってしまうことがあるため
-// (実際に発生した)、値の前後だけを安全に取り除く。値の中身は変更しない。
-function cleanEnvValue(v) {
-  if (!v) return v;
-  return v.trim().replace(/^[("']+/, "").replace(/[)"']+$/, "");
-}
-
 if (require.main === module) {
   // 既存のturso-sync-backup.cjs/verify.cjsと同じ環境変数名(TURSO_TEST_*)を使う。
   // 対象DBが本番ではなく検証用DBであることを示す命名として、CLI利用時はそのまま踏襲する。
+  const cliTargetUrl = cleanEnvValue(process.env.TURSO_TEST_DATABASE_URL || process.env.TURSO_RESTORE_TARGET_URL);
+  const cliTargetToken = cleanEnvValue(process.env.TURSO_TEST_READONLY_TOKEN || process.env.TURSO_RESTORE_TARGET_TOKEN);
   restoreFromBackup({
     backupPath: process.argv[2],
-    targetUrl: cleanEnvValue(process.env.TURSO_TEST_DATABASE_URL || process.env.TURSO_RESTORE_TARGET_URL),
-    targetToken: cleanEnvValue(process.env.TURSO_TEST_READONLY_TOKEN || process.env.TURSO_RESTORE_TARGET_TOKEN),
+    targetUrl: cliTargetUrl,
+    targetToken: cliTargetToken,
     expectedHostSubstring: process.argv[3],
   })
     .then((r) => { process.exitCode = r.success ? 0 : 1; })
     .catch((e) => {
       console.log("RESULT=FAILURE");
-      console.log("想定外のエラー: " + e.message.split("\n")[0]);
+      console.log("想定外のエラー: " + safeErrorMessage(e, [cliTargetUrl, cliTargetToken]));
       process.exitCode = 1;
     });
 }

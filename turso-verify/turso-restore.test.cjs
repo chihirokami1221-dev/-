@@ -11,6 +11,9 @@ const { createClient } = require("@libsql/client");
 
 const { restoreFromBackup } = require("./turso-restore.cjs");
 
+// 実際のトークンではない、テスト専用のダミーJWT風文字列(形式だけ本物に似せてある)。
+const DUMMY_TOKEN = "eyJhbGciOiJkdW1teSJ9.eyJhIjoicm8iLCJkdW1teSI6dHJ1ZX0.ZHVtbXlzaWduYXR1cmU";
+
 async function buildSyntheticBackup(dbPath) {
   const client = createClient({ url: `file:${dbPath}` });
   try {
@@ -62,7 +65,7 @@ test("restoreFromBackup: 接続先のホスト名がexpectedHostSubstringと一�
   const r = await restoreFromBackup({
     backupPath: "dummy.db",
     targetUrl: "https://growth-os-migration-test-chippy.example.turso.io",
-    targetToken: "dummy",
+    targetToken: DUMMY_TOKEN,
     expectedHostSubstring: "completely-different-name",
     log: (m) => logs.push(m),
   });

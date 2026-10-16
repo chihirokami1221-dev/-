@@ -1,4 +1,4 @@
-// 成長OS: Turso(libSQL) Embedded Replicasを使った読み取り専用バックアップスクリプト。
+﻿// 成長OS: Turso(libSQL) Embedded Replicasを使った読み取り専用バックアップスクリプト。
 // この独立環境(turso-verify/)の@libsql/client@0.18.0を使う(メインアプリのnode_modules/
 // package.jsonとは無関係。Node.jsのrequire解決は、このファイル自身のディレクトリから
 // 上方向に探索するため、ここに置くだけで0.18.0が解決される)。
@@ -21,6 +21,7 @@ const { DatabaseSync } = require("node:sqlite");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { cleanEnvValue, validateCredentials, safeErrorMessage } = require("./env-safety.cjs");
 
 const TABLES = [
   "Category", "Event", "RoadmapItem", "KeyAction", "IndividualGoal",
@@ -264,6 +265,15 @@ async function runTursoSyncBackup(config) {
     return { success: false, reason: "missing-config" };
   }
 
+  // 接続を試みる前に、値の形式を検証する(値そのものはログに出さない)。
+  // URLとトークンが入れ替わっている等の設定ミスを、接続エラーに値が漏れる前に検知する。
+  const credCheck = validateCredentials(config.remoteUrl, config.authToken);
+  if (!credCheck.ok) {
+    log("RESULT=FAILURE");
+    log(credCheck.reason);
+    return { success: false, reason: "invalid-credential-format" };
+  }
+
   if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
@@ -293,9 +303,9 @@ async function runTursoSyncBackup(config) {
     log("リモート直結での件数・ハッシュ取得: OK");
   } catch (e) {
     log("RESULT=FAILURE");
-    log("リモートへの直結接続・データ取得に失敗しました: " + e.message.split("\n")[0]);
+    log("リモートへの直結接続・データ取得に失敗しました: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]));
     logCleanupResult(log, await cleanupSiblings(replicaPath));
-    return { success: false, reason: "remote-fetch-failed: " + e.message.split("\n")[0] };
+    return { success: false, reason: "remote-fetch-failed: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]) };
   }
 
   // --- 2. Embedded Replicaへ同期する ---
@@ -306,10 +316,10 @@ async function runTursoSyncBackup(config) {
     log("Embedded Replicaへの同期: OK");
   } catch (e) {
     log("RESULT=FAILURE");
-    log("Embedded Replicaへの同期に失敗しました: " + e.message.split("\n")[0]);
+    log("Embedded Replicaへの同期に失敗しました: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]));
     try { if (replicaClient) replicaClient.close(); } catch {}
     logCleanupResult(log, await cleanupSiblings(replicaPath));
-    return { success: false, reason: "sync-failed: " + e.message.split("\n")[0] };
+    return { success: false, reason: "sync-failed: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]) };
   } finally {
     try { if (replicaClient) replicaClient.close(); } catch {}
   }
@@ -322,10 +332,10 @@ async function runTursoSyncBackup(config) {
     log("クローズ後のレプリカ(本体+付随ファイル)をスナップショットへコピー: OK");
   } catch (e) {
     log("RESULT=FAILURE");
-    log("スナップショットへのコピーに失敗しました: " + e.message.split("\n")[0]);
+    log("スナップショットへのコピーに失敗しました: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]));
     logCleanupResult(log, await cleanupSiblings(replicaPath));
     try { fs.unlinkSync(snapshotPath); } catch {}
-    return { success: false, reason: "copy-failed: " + e.message.split("\n")[0] };
+    return { success: false, reason: "copy-failed: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]) };
   }
 
   // --- 4. スナップショットをWALチェックポイントで単一ファイルへ統合し、読み取り専用検証する ---
@@ -335,9 +345,9 @@ async function runTursoSyncBackup(config) {
     localSnapshot = snapshotLocalFile(snapshotPath);
   } catch (e) {
     log("RESULT=FAILURE");
-    log("スナップショットの統合・検証に失敗しました: " + e.message.split("\n")[0]);
+    log("スナップショットの統合・検証に失敗しました: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]));
     logCleanupResult(log, await cleanupSiblings(replicaPath));
-    return { success: false, reason: "verify-failed: " + e.message.split("\n")[0] };
+    return { success: false, reason: "verify-failed: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]) };
   }
 
   let decision = decideSuccess(remoteSnapshot, localSnapshot);
@@ -359,7 +369,7 @@ async function runTursoSyncBackup(config) {
         decision = { success: false, reason: "再比較しても不一致: " + recheckDecision.reason };
       }
     } catch (e) {
-      log("再比較のためのリモート再取得に失敗しました: " + e.message.split("\n")[0]);
+      log("再比較のためのリモート再取得に失敗しました: " + safeErrorMessage(e, [config.remoteUrl, config.authToken]));
     }
   }
 
@@ -407,24 +417,19 @@ module.exports = {
   TABLES,
 };
 
-// .envファイルへの貼り付け時に、括弧・引用符が誤って前後に残ってしまうことがあるため
-// (turso-restore.cjsの運用で実際に発生した)、値の前後だけを安全に取り除く。
-function cleanEnvValue(v) {
-  if (!v) return v;
-  return v.trim().replace(/^[("']+/, "").replace(/[)"']+$/, "");
-}
-
 if (require.main === module) {
+  const cliRemoteUrl = cleanEnvValue(process.env.TURSO_TEST_DATABASE_URL);
+  const cliAuthToken = cleanEnvValue(process.env.TURSO_TEST_READONLY_TOKEN);
   runTursoSyncBackup({
-    remoteUrl: cleanEnvValue(process.env.TURSO_TEST_DATABASE_URL),
-    authToken: cleanEnvValue(process.env.TURSO_TEST_READONLY_TOKEN),
+    remoteUrl: cliRemoteUrl,
+    authToken: cliAuthToken,
   })
     .then((r) => {
       process.exitCode = r.success ? 0 : 1;
     })
     .catch((e) => {
       console.log("RESULT=FAILURE");
-      console.log("想定外のエラー: " + e.message.split("\n")[0]);
+      console.log("想定外のエラー: " + safeErrorMessage(e, [cliRemoteUrl, cliAuthToken]));
       process.exitCode = 1;
     });
 }

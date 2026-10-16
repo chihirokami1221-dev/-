@@ -8,6 +8,7 @@ const { createClient } = require("@libsql/client");
 const { DatabaseSync } = require("node:sqlite");
 const fs = require("node:fs");
 const path = require("node:path");
+const { cleanEnvValue, validateCredentials, safeErrorMessage } = require("./env-safety.cjs");
 
 const DIR = __dirname;
 
@@ -74,11 +75,17 @@ async function testLocalOnly() {
 
 // --- 2. 実際のTursoへのEmbedded Replica同期(--syncフラグ指定時のみ) ---
 async function testRealSync() {
-  const url = process.env.TURSO_TEST_DATABASE_URL;
-  const token = process.env.TURSO_TEST_READONLY_TOKEN;
+  const url = cleanEnvValue(process.env.TURSO_TEST_DATABASE_URL);
+  const token = cleanEnvValue(process.env.TURSO_TEST_READONLY_TOKEN);
   if (!url || !token) {
     console.log("RESULT(実同期)=SKIPPED(環境変数未設定)");
     return null;
+  }
+  const credCheck = validateCredentials(url, token);
+  if (!credCheck.ok) {
+    console.log("RESULT(実同期)=FAILURE");
+    console.log(credCheck.reason);
+    return false;
   }
 
   const replicaPath = path.join(DIR, "verify-replica.tmp.db");
@@ -87,6 +94,8 @@ async function testRealSync() {
   try { fs.unlinkSync(snapshotPath); } catch {}
 
   // リモート直結で件数を取得(書き込みなし、SELECTのみ)。
+  // ここでのエラーは、値を含まない形に変換してから呼び出し元へ伝える
+  // (この関数の外へ生のエラーを一切漏らさない)。
   const directClient = createClient({ url, authToken: token });
   const TABLES = [
     "Category", "Event", "RoadmapItem", "KeyAction", "IndividualGoal",
@@ -101,12 +110,17 @@ async function testRealSync() {
         remoteCounts[t] = Number(rs.rows[0].c);
       } catch (e) {
         if (/no such table/i.test(e.message)) { remoteCounts[t] = null; continue; }
-        throw e;
+        throw new Error(safeErrorMessage(e, [url, token]));
       }
     }
     console.log("リモート直結での件数取得: OK");
+  } catch (e) {
+    console.log("RESULT(実同期)=FAILURE");
+    console.log("リモート直結での件数取得に失敗しました: " + safeErrorMessage(e, [url, token]));
+    await cleanupAll(replicaPath);
+    return false;
   } finally {
-    directClient.close();
+    try { directClient.close(); } catch {}
   }
 
   // Embedded Replicaへ同期する。
@@ -117,7 +131,7 @@ async function testRealSync() {
     console.log("Embedded Replicaへの同期: OK(0.18.0で成功しました)");
   } catch (e) {
     console.log("RESULT(実同期)=FAILURE");
-    console.log("同期エラー: " + e.message.split("\n")[0]);
+    console.log("同期エラー: " + safeErrorMessage(e, [url, token]));
     try { if (replicaClient) replicaClient.close(); } catch {}
     await cleanupAll(replicaPath);
     return false;
@@ -174,6 +188,10 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.log("想定外のエラー: " + e.message);
+  // ここに到達する時点で、url/tokenを含むエラーはtestRealSync内で既に安全な形に
+  // 変換されているはずだが、万一に備えてここでも再度除去する。
+  const url = cleanEnvValue(process.env.TURSO_TEST_DATABASE_URL);
+  const token = cleanEnvValue(process.env.TURSO_TEST_READONLY_TOKEN);
+  console.log("想定外のエラー: " + safeErrorMessage(e, [url, token]));
   process.exitCode = 1;
 });
