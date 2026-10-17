@@ -90,6 +90,32 @@
 5. デプロイを実行する(承認後)。
 6. デプロイ後、Vercelダッシュボードでログイン用のWAFレート制限ルールを設定する(デプロイ前は設定不可)。
 
+## 10. マイグレーション履歴(_prisma_migrations)と実スキーマの差異(詳細)
+
+`create-prod-schema.cjs`は、テーブル・インデックスの実体は現在の`prisma/dev.db`のsqlite_masterから
+そのまま作るが、`_prisma_migrations`には13件の`migration.sql`のchecksumを「適用済み」として
+記録する。この2つは厳密には一致しない(13件のファイルをそのまま再生しても、現在のdev.dbには
+ならない)。実機検証(2026-10-16)で確認した具体的な差異は以下の通り。
+
+| テーブル | 再生結果との差異 |
+|---|---|
+| `Achievement` | `role`・`thirdPartyFeedback`・`revenueAmount`・`revenueCurrency`・`revenueType`・`revenuePeriod`・`sourceDiaryEntryId`・`relatedRoadmapItemId`・`relatedIndividualGoalId`列が無い(旧`isReproducible`・`isMonetized`列のまま)。関連インデックス2件も無い。 |
+| `MarketDataEntry` | テーブル自体がどのmigration.sqlにも存在しない(`prisma db push`のみで作られ、対応する記録が一度も残っていない)。 |
+| `MarketValueScoreSnapshot` | `axisScoresJson`・`reasonNote`・`achievementCountAtSnapshot`列が無い。 |
+| `RoadmapItem` | `content`・`completionCriteria`・`reason`列に`DEFAULT ''`が付かない(列自体はあるが既定値が異なる)。 |
+| `WeeklyTodoItem` | `roadmapItemId`・`individualGoalId`列と、それに対応する外部キー制約2件が無い。 |
+
+**今後のマイグレーション管理への影響**:
+- `prisma migrate dev`は、migration.sql群を「シャドウDB」上で再生した結果をスキーマの基準として
+  差分を計算する。上記の差異がある状態で`prisma migrate dev`を使うと、シャドウDBが実際の本番
+  スキーマと異なるため、不要な(あるいは不整合な)マイグレーションが生成される可能性がある。
+- 一方、`prisma db push`はシャドウDBを使わず、`schema.prisma`と実際のDBを直接比較するため、
+  この差異の影響を受けない。
+- **推奨**: 本番DBのスキーマを今後変更する際は、しばらくは`prisma db push`を使う(これまでの
+  ローカル開発でも大半の変更が`db push`で行われてきており、運用上の実績もある)。`prisma migrate
+  dev`を再度使いたい場合は、その前に「現在の実スキーマを反映した新しい1本のマイグレーション」を
+  `prisma migrate dev --create-only`等で作り直し、履歴を実態に合わせてから再開する。
+
 ## 未確定事項
 
 - 本番DB作成・読み取り専用トークン発行は完了済み。書き込み可能トークンの発行は、Tursoダッシュボードでの操作が必要(承認後に実施)。
