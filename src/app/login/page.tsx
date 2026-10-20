@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { submitLogin } from "@/lib/loginClient";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,25 +15,17 @@ export default function LoginPage() {
     setSubmitting(true);
     setError(null);
 
-    // fetch自体が失敗(通信エラー・タイムアウト等)した場合、tryが無いとここで例外が
-    // 外へ飛び、setSubmitting(false)が実行されずボタンが「確認中...」のまま固まり、
+    // submitLogin内部で通信全体に20秒のタイムアウトを設けている。tryが無いと通信失敗時に
+    // 例外が外へ飛び、setSubmitting(false)が実行されずボタンが「確認中...」のまま固まり、
     // エラーメッセージも出ないまま無反応に見えてしまう(実際に発生した不具合)。
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-
-      if (!res.ok) {
-        setError("パスワードが正しくありません。");
+      const result = await submitLogin(password);
+      if (!result.ok) {
+        setError(result.error ?? "パスワードが正しくありません。");
         return;
       }
-
       router.push("/");
       router.refresh();
-    } catch {
-      setError("通信に失敗しました。しばらく待ってから、もう一度お試しください。");
     } finally {
       setSubmitting(false);
     }
