@@ -53,8 +53,11 @@ export default async function GoalsPage({
   const isDoneTab = tab === "done";
   const categoryId = isDoneTab ? undefined : tab;
 
-  const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
-  const allGoals = await loadGoals();
+  // categories・allGoalsは互いに依存しないクエリのため並列実行する。
+  const [categories, allGoals] = await Promise.all([
+    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    loadGoals(),
+  ]);
   // 完了(DONE)した目標は通常のタブから外れ、「完了」タブにのみ表示する。
   const baseGoals = isDoneTab
     ? allGoals.filter((g) => g.status === "DONE")

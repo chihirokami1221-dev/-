@@ -12,19 +12,21 @@ export default async function DiaryPage({
 }) {
   const { month, keyword, categoryId } = await searchParams;
 
-  const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
-
   const isSearchMode = Boolean(keyword || categoryId);
 
   if (isSearchMode) {
-    const entries = await prisma.diaryEntry.findMany({
-      where: {
-        categoryId: categoryId || undefined,
-        content: keyword ? { contains: keyword } : undefined,
-      },
-      include: { category: true },
-      orderBy: { date: "desc" },
-    });
+    // categories・entriesは互いに依存しないクエリのため並列実行する。
+    const [categories, entries] = await Promise.all([
+      prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+      prisma.diaryEntry.findMany({
+        where: {
+          categoryId: categoryId || undefined,
+          content: keyword ? { contains: keyword } : undefined,
+        },
+        include: { category: true },
+        orderBy: { date: "desc" },
+      }),
+    ]);
 
     return (
       <div className="flex flex-col gap-6">
@@ -43,11 +45,15 @@ export default async function DiaryPage({
   const rangeStart = new Date(year, monthNum - 1, 1, 0, 0, 0, 0);
   const rangeEnd = new Date(year, monthNum, 0, 23, 59, 59, 999);
 
-  const entries = await prisma.diaryEntry.findMany({
-    where: { date: { gte: rangeStart, lte: rangeEnd } },
-    include: { category: true },
-    orderBy: { date: "desc" },
-  });
+  // categories・entriesは互いに依存しないクエリのため並列実行する。
+  const [categories, entries] = await Promise.all([
+    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.diaryEntry.findMany({
+      where: { date: { gte: rangeStart, lte: rangeEnd } },
+      include: { category: true },
+      orderBy: { date: "desc" },
+    }),
+  ]);
 
   const countByDate: Record<string, number> = {};
   for (const entry of entries) {

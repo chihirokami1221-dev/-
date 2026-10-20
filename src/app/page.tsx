@@ -20,56 +20,65 @@ import { computeRevenueSummary } from "@/lib/revenueSummary";
 export default async function DashboardPage() {
   await connection();
 
-  const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
-  const progresses = await Promise.all(categories.map((c) => computeWeeklyDiaryProgress(c.id)));
-  await ensureTodayArchived(categories, progresses);
-
-  const marketValueData = await computeMarketValue();
-  const stageEval = evaluateStage(marketValueData);
-  const latestSnapshot = await prisma.marketValueScoreSnapshot.findFirst({
-    orderBy: { computedAt: "desc" },
-  });
-
   const now = new Date();
   const weeklyTodoStart = getStartOfWeek(now);
-  const weeklyTodos = await prisma.weeklyTodoItem.findMany({
-    where: { weekStart: weeklyTodoStart },
-    include: {
-      roadmapItem: { select: { id: true, title: true, categoryId: true } },
-      individualGoal: { select: { id: true, title: true, categoryId: true } },
-    },
-    orderBy: [{ dayOfWeek: "asc" }, { isDone: "asc" }, { createdAt: "asc" }],
-  });
-
-  const linkableRoadmapItems = await prisma.roadmapItem.findMany({
-    where: { status: { not: "DONE" } },
-    select: { id: true, title: true, categoryId: true },
-    orderBy: { title: "asc" },
-  });
-
-  const linkableGoals = await prisma.individualGoal.findMany({
-    where: { syncDeleted: false, status: { not: "DONE" } },
-    select: { id: true, title: true, categoryId: true },
-    orderBy: { title: "asc" },
-  });
-
-  // 期限つきだけでなく、期限が無くても「今月が対象月」の優先度「高」の目標も、おすすめタスクに含める
-  // (ロードマップの重点行動から自動生成された目標は期限が入らない仕様のため)。
   const currentMonthStart = monthStartOfDate(now);
-  const recommendedGoals = await prisma.individualGoal.findMany({
-    where: {
-      syncDeleted: false,
-      status: { not: "DONE" },
-      priority: "HIGH",
-      OR: [{ dueDate: { not: null } }, { targetMonth: currentMonthStart }],
-    },
-    select: { id: true, title: true, categoryId: true, dueDate: true },
-    orderBy: [{ dueDate: "asc" }],
-  });
 
-  const revenueSummary = await computeRevenueSummary(
-    categories.map((c) => ({ id: c.id, label: c.label, color: c.color })),
-  );
+  // 以下はすべて互いに依存しないクエリ(計算)のため、直列に待たず並列実行する。
+  // Turso(リモートDB)は1往復ごとにネットワーク遅延が発生するため、ここを直列にすると
+  // ページ表示が往復回数分だけ線形に遅くなる(実際に発生した遅延の主要因)。
+  const [
+    categories,
+    marketValueData,
+    latestSnapshot,
+    weeklyTodos,
+    linkableRoadmapItems,
+    linkableGoals,
+    recommendedGoals,
+  ] = await Promise.all([
+    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    computeMarketValue(),
+    prisma.marketValueScoreSnapshot.findFirst({ orderBy: { computedAt: "desc" } }),
+    prisma.weeklyTodoItem.findMany({
+      where: { weekStart: weeklyTodoStart },
+      include: {
+        roadmapItem: { select: { id: true, title: true, categoryId: true } },
+        individualGoal: { select: { id: true, title: true, categoryId: true } },
+      },
+      orderBy: [{ dayOfWeek: "asc" }, { isDone: "asc" }, { createdAt: "asc" }],
+    }),
+    prisma.roadmapItem.findMany({
+      where: { status: { not: "DONE" } },
+      select: { id: true, title: true, categoryId: true },
+      orderBy: { title: "asc" },
+    }),
+    prisma.individualGoal.findMany({
+      where: { syncDeleted: false, status: { not: "DONE" } },
+      select: { id: true, title: true, categoryId: true },
+      orderBy: { title: "asc" },
+    }),
+    // 期限つきだけでなく、期限が無くても「今月が対象月」の優先度「高」の目標も、おすすめタスクに含める
+    // (ロードマップの重点行動から自動生成された目標は期限が入らない仕様のため)。
+    prisma.individualGoal.findMany({
+      where: {
+        syncDeleted: false,
+        status: { not: "DONE" },
+        priority: "HIGH",
+        OR: [{ dueDate: { not: null } }, { targetMonth: currentMonthStart }],
+      },
+      select: { id: true, title: true, categoryId: true, dueDate: true },
+      orderBy: [{ dueDate: "asc" }],
+    }),
+  ]);
+
+  const stageEval = evaluateStage(marketValueData);
+
+  // categoriesの取得後でなければ計算できないもの(progresses・ensureTodayArchived・revenueSummary)。
+  const progresses = await Promise.all(categories.map((c) => computeWeeklyDiaryProgress(c.id)));
+  const [, revenueSummary] = await Promise.all([
+    ensureTodayArchived(categories, progresses),
+    computeRevenueSummary(categories.map((c) => ({ id: c.id, label: c.label, color: c.color }))),
+  ]);
 
   return (
     <div className="flex flex-col gap-8">

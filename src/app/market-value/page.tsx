@@ -12,12 +12,12 @@ import { formatJP } from "@/lib/dateUtils";
 
 export default async function MarketValuePage() {
   await connection();
-  const data = await computeMarketValue();
+  // data・snapshotsは互いに依存しないクエリのため並列実行する。
+  const [data, snapshots] = await Promise.all([
+    computeMarketValue(),
+    prisma.marketValueScoreSnapshot.findMany({ orderBy: { computedAt: "desc" }, take: 6 }),
+  ]);
   const stageEval = evaluateStage(data);
-  const snapshots = await prisma.marketValueScoreSnapshot.findMany({
-    orderBy: { computedAt: "desc" },
-    take: 6,
-  });
   const latestSnapshot = snapshots[0] ?? null;
 
   const diff = latestSnapshot ? Math.round((data.normalizedScore - latestSnapshot.totalScore) * 10) / 10 : null;

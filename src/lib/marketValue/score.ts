@@ -202,13 +202,16 @@ export function evalThirdPartyEvaluation(achievements: AchievementWithLinks[]): 
 }
 
 // 市場需要は実績側のタグ付けに依存せず、全実績のスキルを市場データと自動照合する。
-async function evalMarketDemand(achievements: AchievementWithLinks[]): Promise<{
+// marketEntriesは呼び出し側(computeMarketValue)でachievementsと並列に取得済みのものを渡す
+// (この関数自体はDB読み取りを行わない)。
+function evalMarketDemand(
+  achievements: AchievementWithLinks[],
+  marketEntries: { requiredSkills: string; preferredSkills: string }[],
+): {
   result: AxisScoreResult;
   gapSkills: string[];
   marketDataCount: number;
-}> {
-  const marketEntries = await prisma.marketDataEntry.findMany();
-
+} {
   if (marketEntries.length === 0) {
     return {
       result: {
@@ -291,7 +294,12 @@ async function evalMarketDemand(achievements: AchievementWithLinks[]): Promise<{
 }
 
 export async function computeMarketValue(): Promise<MarketValueEvalData> {
-  const achievements = await loadAchievements();
+  // achievements・marketDataEntryは互いに依存しないクエリのため並列実行する
+  // (直列に待つと往復回数分だけ余計に遅くなる)。
+  const [achievements, marketEntries] = await Promise.all([
+    loadAchievements(),
+    prisma.marketDataEntry.findMany(),
+  ]);
 
   const axisScores = {} as Record<AxisKey, AxisScoreResult>;
   axisScores.specialist_skill = evalSpecialistSkill(achievements);
@@ -299,7 +307,7 @@ export async function computeMarketValue(): Promise<MarketValueEvalData> {
   axisScores.reproducibility = evalReproducibility(achievements);
   axisScores.third_party_evaluation = evalThirdPartyEvaluation(achievements);
 
-  const marketDemand = await evalMarketDemand(achievements);
+  const marketDemand = evalMarketDemand(achievements, marketEntries);
   axisScores.market_demand = marketDemand.result;
 
   const totalRaw = AXIS_DEFINITIONS.reduce((sum, def) => sum + axisScores[def.key].score, 0);
