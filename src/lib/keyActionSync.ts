@@ -102,3 +102,28 @@ export async function syncIndividualGoalsForPhase(roadmapItemId: string): Promis
     }
   });
 }
+
+// ロードマップの計画ブロック(RoadmapItem)自体を削除する直前に呼ぶ。
+// そのブロックに紐づく個別目標(重点行動経由・直接紐づけの両方を含む)を、
+// syncIndividualGoalsForPhaseの「対象外になった場合」と同じ安全ルールで後処理する:
+// - 手動編集済み・完了済み・Weekly ToDoの紐づけがある(=履歴がある)個別目標は削除せず残す
+//   (ブロック削除に伴うカスケードでroadmapItemId/keyActionIdはnullになるが、個別目標自体は消えない)。
+// - 履歴の無い個別目標は論理削除(syncDeleted=true)し、個別目標の一覧からも消す。
+// 呼び出し側(DELETE /api/roadmap/[id])が、この処理の直後にRoadmapItemを削除する想定。
+export async function reconcileIndividualGoalsForDeletedRoadmapItem(roadmapItemId: string): Promise<void> {
+  const goals = await prisma.individualGoal.findMany({
+    where: { roadmapItemId, syncDeleted: false },
+    include: { weeklyTodoItems: { select: { id: true } } },
+  });
+
+  const toSoftDelete = goals
+    .filter((g) => !(g.manuallyEdited || g.status === "DONE" || g.weeklyTodoItems.length > 0))
+    .map((g) => g.id);
+
+  if (toSoftDelete.length === 0) return;
+
+  await prisma.individualGoal.updateMany({
+    where: { id: { in: toSoftDelete } },
+    data: { syncDeleted: true },
+  });
+}

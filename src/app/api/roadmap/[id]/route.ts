@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { roadmapItemUpdateSchema } from "@/lib/validation";
 import { syncProgressWithStatus } from "@/lib/roadmapProgress";
-import { syncIndividualGoalsForPhase } from "@/lib/keyActionSync";
+import { syncIndividualGoalsForPhase, reconcileIndividualGoalsForDeletedRoadmapItem } from "@/lib/keyActionSync";
 import { requireAuth, requireSameOrigin } from "@/lib/auth";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -55,6 +55,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (csrfError) return csrfError;
 
   const { id } = await params;
+  // 計画ブロックの削除で、紐づく個別目標が一覧に残り続けないようにする(履歴がある個別目標は保護する)。
+  await reconcileIndividualGoalsForDeletedRoadmapItem(id);
   await prisma.roadmapItem.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

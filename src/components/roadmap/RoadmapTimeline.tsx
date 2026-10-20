@@ -64,7 +64,7 @@ export function RoadmapTimeline({
   const scrollRef = useRef<HTMLDivElement>(null);
   const today = useMemo(() => new Date(), []);
 
-  const range = useMemo(() => computeRangeForZoom(zoom, items, today), [zoom, items, today]);
+  const range = useMemo(() => computeRangeForZoom(zoom, items, today, events), [zoom, items, today, events]);
   const months = useMemo(() => monthsInRange(range), [range]);
   const totalMonths = months.length;
   const trackWidth = totalMonths * PX_PER_MONTH;

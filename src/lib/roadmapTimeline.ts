@@ -38,25 +38,51 @@ export function monthsInRange(range: TimelineRange): Date[] {
   return months;
 }
 
-// 日付が設定されているすべての項目(+今日)を含む最小範囲(月初〜月初)を求める。全期間表示用。
-export function computeAllRange(items: TimelineDatedItem[], today: Date = new Date()): TimelineRange {
+export interface TimelineDatedEvent {
+  date: Date;
+}
+
+// 全期間表示の先端までの最低保証月数。計画ブロック(RoadmapItem)を削除して期間未設定になっても、
+// スケジュール追加したイベント(丸)だけが表示範囲から外れて消えてしまわないよう、
+// 少なくとも今月から半年先まではロードマップとして表示し続ける(要望により固定)。
+const MINIMUM_FUTURE_MONTHS = 6;
+
+// 日付が設定されているすべての項目・イベント(+今日)を含む最小範囲(月初〜月初)を求める。全期間表示用。
+// 項目(計画ブロック)の日付だけでなく、イベント(丸)の日付も範囲計算に含める。
+// これにより、計画ブロックを削除してもイベントの日付が表示範囲外にならない。
+export function computeAllRange(
+  items: TimelineDatedItem[],
+  today: Date = new Date(),
+  events: TimelineDatedEvent[] = [],
+): TimelineRange {
   const dates: Date[] = [today];
   for (const item of items) {
     if (item.startDate) dates.push(new Date(item.startDate));
     if (item.dueDate) dates.push(new Date(item.dueDate));
   }
+  for (const event of events) {
+    dates.push(new Date(event.date));
+  }
 
   const min = new Date(Math.min(...dates.map((d) => d.getTime())));
   const max = new Date(Math.max(...dates.map((d) => d.getTime())));
 
+  const minimumEnd = addMonths(startOfMonth(today), MINIMUM_FUTURE_MONTHS);
+  const computedEnd = addMonths(startOfMonth(max), 1);
+
   return {
     start: startOfMonth(min),
-    end: addMonths(startOfMonth(max), 1),
+    end: computedEnd > minimumEnd ? computedEnd : minimumEnd,
   };
 }
 
-export function computeRangeForZoom(zoom: TimelineZoom, items: TimelineDatedItem[], today: Date = new Date()): TimelineRange {
-  if (zoom === "all") return computeAllRange(items, today);
+export function computeRangeForZoom(
+  zoom: TimelineZoom,
+  items: TimelineDatedItem[],
+  today: Date = new Date(),
+  events: TimelineDatedEvent[] = [],
+): TimelineRange {
+  if (zoom === "all") return computeAllRange(items, today, events);
 
   const monthsMap: Record<Exclude<TimelineZoom, "all">, number> = { "3m": 3, "6m": 6, "1y": 12 };
   const start = startOfMonth(today);
