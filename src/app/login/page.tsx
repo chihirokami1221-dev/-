@@ -14,21 +14,28 @@ export default function LoginPage() {
     setSubmitting(true);
     setError(null);
 
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
+    // fetch自体が失敗(通信エラー・タイムアウト等)した場合、tryが無いとここで例外が
+    // 外へ飛び、setSubmitting(false)が実行されずボタンが「確認中...」のまま固まり、
+    // エラーメッセージも出ないまま無反応に見えてしまう(実際に発生した不具合)。
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
 
-    setSubmitting(false);
+      if (!res.ok) {
+        setError("パスワードが正しくありません。");
+        return;
+      }
 
-    if (!res.ok) {
-      setError("パスワードが正しくありません。");
-      return;
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("通信に失敗しました。しばらく待ってから、もう一度お試しください。");
+    } finally {
+      setSubmitting(false);
     }
-
-    router.push("/");
-    router.refresh();
   }
 
   return (
