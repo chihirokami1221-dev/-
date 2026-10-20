@@ -25,12 +25,21 @@ export function computeTargetMonths(startDate: Date | null, dueDate: Date | null
   return months;
 }
 
+// 「ロードマップから外れた個別目標を削除せず残すべきか」の判定。
+// manuallyEdited(タイトル等を少し編集した程度)だけでは保護しない
+// (ロードマップに今無い項目は個別目標からも消すという方針のため)。
+// 完了済み・Weekly ToDoに紐づけ済み・実績に紐づけ済みのいずれかに該当する場合のみ、
+// 実質的な履歴があるとみなして保護する(syncDeleted=trueにせず残す)。
+function hasRealHistory(goal: { status: string; weeklyTodoItems: unknown[]; relatedAchievements: unknown[] }): boolean {
+  return goal.status === "DONE" || goal.weeklyTodoItems.length > 0 || goal.relatedAchievements.length > 0;
+}
+
 // 指定したフェーズ(RoadmapItem)に紐づく重点行動を、対象月ごとの個別目標へ同期する。
 // 安全ルール:
-// - 手動編集済み(manuallyEdited)・手動削除済み(syncDeleted)の個別目標は上書き・復活させない。
-// - 重点行動が非表示(archived)になった/対象月から外れた場合、関連するWeekly ToDoがある・
-//   完了済み・手動編集済みのいずれかに該当する個別目標は削除せず「連携解除」(keyActionId=null)に留める。
-//   該当しない(未着手・自動生成のまま・関連履歴なし)個別目標のみ論理削除(syncDeleted=true)する。
+// - 手動編集済み(manuallyEdited)・手動削除済み(syncDeleted)の個別目標は上書きしない(タイトル等は書き換えない)。
+// - 重点行動が非表示(archived)になった/対象月から外れた場合、hasRealHistory(完了済み・Weekly ToDo・
+//   実績のいずれかに紐づけ済み)に該当する個別目標は削除せず「連携解除」(keyActionId=null)に留める。
+//   該当しない(manuallyEditedのみ・未着手・関連履歴なし)個別目標は論理削除(syncDeleted=true)する。
 export async function syncIndividualGoalsForPhase(roadmapItemId: string): Promise<void> {
   const phase = await prisma.roadmapItem.findUnique({ where: { id: roadmapItemId } });
   if (!phase) return;
@@ -85,15 +94,14 @@ export async function syncIndividualGoalsForPhase(roadmapItemId: string): Promis
     // 対象から外れた(重点行動が削除/非対象月になった)自動生成の個別目標を後処理する。
     const existingGoals = await tx.individualGoal.findMany({
       where: { roadmapItemId: phase.id, keyActionId: { not: null }, syncDeleted: false },
-      include: { weeklyTodoItems: { select: { id: true } } },
+      include: { weeklyTodoItems: { select: { id: true } }, relatedAchievements: { select: { id: true } } },
     });
 
     for (const goal of existingGoals) {
       const pairKey = `${goal.keyActionId}:${goal.targetMonth.getTime()}`;
       if (expectedPairs.has(pairKey)) continue;
 
-      const hasHistory = goal.manuallyEdited || goal.status === "DONE" || goal.weeklyTodoItems.length > 0;
-      if (hasHistory) {
+      if (hasRealHistory(goal)) {
         // 安全に削除できないため連携だけ解除し、個別目標自体は残す。
         await tx.individualGoal.update({ where: { id: goal.id }, data: { keyActionId: null } });
       } else {
@@ -106,19 +114,18 @@ export async function syncIndividualGoalsForPhase(roadmapItemId: string): Promis
 // ロードマップの計画ブロック(RoadmapItem)自体を削除する直前に呼ぶ。
 // そのブロックに紐づく個別目標(重点行動経由・直接紐づけの両方を含む)を、
 // syncIndividualGoalsForPhaseの「対象外になった場合」と同じ安全ルールで後処理する:
-// - 手動編集済み・完了済み・Weekly ToDoの紐づけがある(=履歴がある)個別目標は削除せず残す
+// - hasRealHistory(完了済み・Weekly ToDo・実績のいずれかに紐づけ済み)な個別目標は削除せず残す
 //   (ブロック削除に伴うカスケードでroadmapItemId/keyActionIdはnullになるが、個別目標自体は消えない)。
-// - 履歴の無い個別目標は論理削除(syncDeleted=true)し、個別目標の一覧からも消す。
+// - それ以外(manuallyEditedのみ・未着手・関連履歴なし)の個別目標は論理削除(syncDeleted=true)し、
+//   個別目標の一覧からも消す(「ロードマップに今無い項目は個別目標からも消す」という方針)。
 // 呼び出し側(DELETE /api/roadmap/[id])が、この処理の直後にRoadmapItemを削除する想定。
 export async function reconcileIndividualGoalsForDeletedRoadmapItem(roadmapItemId: string): Promise<void> {
   const goals = await prisma.individualGoal.findMany({
     where: { roadmapItemId, syncDeleted: false },
-    include: { weeklyTodoItems: { select: { id: true } } },
+    include: { weeklyTodoItems: { select: { id: true } }, relatedAchievements: { select: { id: true } } },
   });
 
-  const toSoftDelete = goals
-    .filter((g) => !(g.manuallyEdited || g.status === "DONE" || g.weeklyTodoItems.length > 0))
-    .map((g) => g.id);
+  const toSoftDelete = goals.filter((g) => !hasRealHistory(g)).map((g) => g.id);
 
   if (toSoftDelete.length === 0) return;
 
