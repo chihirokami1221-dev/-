@@ -13,7 +13,12 @@ function createPrismaClient(): PrismaClient {
   const tursoToken = process.env.TURSO_AUTH_TOKEN;
 
   if (tursoUrl && tursoToken) {
-    const adapter = new PrismaLibSQL({ url: tursoUrl, authToken: tursoToken });
+    // timestampFormat省略時(デフォルトのiso8601)だと、DateTime列が内部的にunixepoch(整数)で
+    // 保存されているSQLite/Tursoに対して、WHERE句の日付比較パラメータを"YYYY-MM-DD HH:MM:SS UTC"
+    // 形式の文字列で送ってしまい、SQLiteの型アフィニティ規則(TEXT > INTEGER)により
+    // 絶対に一致しなくなる(エラーにならずヒット件数が常に0件になる、実機で確認した不具合)。
+    // 列の実際の保存形式(整数ミリ秒)に合わせてunixepoch-msを明示する。
+    const adapter = new PrismaLibSQL({ url: tursoUrl, authToken: tursoToken }, { timestampFormat: "unixepoch-ms" });
     return new PrismaClient({ adapter });
   }
 
