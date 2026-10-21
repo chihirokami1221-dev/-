@@ -172,7 +172,10 @@ export function RoadmapTimeline({
                             style={{ left: offsetMonths * PX_PER_MONTH }}
                             title={event.title}
                           >
-                            <span className="block h-2.5 w-2.5 rounded-full bg-amber-500" />
+                            <span
+                              className="block h-2.5 w-2.5 rounded-full ring-2 ring-white"
+                              style={{ backgroundColor: category.color }}
+                            />
                           </Link>
                         );
                       })}
@@ -312,7 +315,7 @@ function MobileTimelineList({
                     href={`/roadmap#category-${row.categoryId}`}
                     className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/50 px-3 py-2"
                   >
-                    <span className="shrink-0 text-amber-500">◇</span>
+                    <span className="shrink-0" style={{ color: category?.color }}>◇</span>
                     <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{row.title}</span>
                     <span className="shrink-0 text-xs text-slate-400">{formatMD(row.date)}</span>
                   </Link>
