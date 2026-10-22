@@ -232,6 +232,8 @@ model WeeklyTodoItem {
   title         String
   priority      Priority     @default(MEDIUM)
   isDone        Boolean      @default(false)
+  // タスクの補足・実行内容・気づき等を自由記述で残す任意メモ(最大2000文字、APIのZodで検証)。
+  memo          String       @default("")
   roadmapItemId String?
   roadmapItem   RoadmapItem? @relation(fields: [roadmapItemId], references: [id], onDelete: SetNull)
   individualGoalId String?

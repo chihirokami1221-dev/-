@@ -6,7 +6,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
 import { getStartOfWeek, getWeekLabel } from "@/lib/weekUtils";
+
+const MEMO_MAX_LENGTH = 2000;
 
 interface RoadmapItemOption {
   id: string;
@@ -26,6 +29,7 @@ interface WeeklyTodoItem {
   isDone: boolean;
   priority: "HIGH" | "MEDIUM" | "LOW";
   dayOfWeek: "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
+  memo?: string;
   roadmapItemId?: string | null;
   roadmapItem?: RoadmapItemOption | null;
   individualGoalId?: string | null;
@@ -74,6 +78,8 @@ export function WeeklyTodoList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [editingLink, setEditingLink] = useState("");
+  const [editingMemo, setEditingMemo] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -151,29 +157,53 @@ export function WeeklyTodoList({
     await createItem(dayKey, title, { individualGoalId });
   }
 
-  async function saveEdit(item: WeeklyTodoItem) {
-    const value = editingText.trim();
-    if (!value) return;
-    setError(null);
+  function hasUnsavedEdit(item: WeeklyTodoItem): boolean {
+    return (
+      editingText !== item.title ||
+      editingMemo !== (item.memo ?? "") ||
+      editingLink !== (item.roadmapItemId ?? "")
+    );
+  }
 
-    const res = await fetch(`/api/weekly-todos/${item.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: value, roadmapItemId: editingLink || null }),
-    });
-
-    if (!res.ok) {
-      handleError("保存に失敗しました。もう一度お試しください。");
-      return;
-    }
-
-    const updated = await res.json();
-    const linked = roadmapItems.find((r) => r.id === updated.roadmapItemId) ?? null;
-    setItems((prev) => prev.map((current) => (current.id === item.id ? { ...updated, roadmapItem: linked } : current)));
+  function closeEdit() {
     setEditingId(null);
     setEditingText("");
     setEditingLink("");
-    router.refresh();
+    setEditingMemo("");
+  }
+
+  function cancelEdit(item: WeeklyTodoItem) {
+    // 誤操作による入力内容の消失を防ぐため、未保存の変更がある場合は確認する。
+    if (hasUnsavedEdit(item) && !window.confirm("編集中の内容を破棄しますか?")) return;
+    closeEdit();
+  }
+
+  async function saveEdit(item: WeeklyTodoItem) {
+    const value = editingText.trim();
+    if (!value || savingEdit) return;
+    setError(null);
+    setSavingEdit(true);
+
+    try {
+      const res = await fetch(`/api/weekly-todos/${item.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: value, roadmapItemId: editingLink || null, memo: editingMemo }),
+      });
+
+      if (!res.ok) {
+        handleError("保存に失敗しました。もう一度お試しください。");
+        return;
+      }
+
+      const updated = await res.json();
+      const linked = roadmapItems.find((r) => r.id === updated.roadmapItemId) ?? null;
+      setItems((prev) => prev.map((current) => (current.id === item.id ? { ...updated, roadmapItem: linked } : current)));
+      closeEdit();
+      router.refresh();
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   async function toggleDone(item: WeeklyTodoItem) {
@@ -338,12 +368,14 @@ export function WeeklyTodoList({
                               }
                             }}
                             autoFocus
+                            disabled={savingEdit}
                             className="text-sm"
                           />
                           <Select
                             aria-label="関連するロードマップ項目"
                             value={editingLink}
                             onChange={(e) => setEditingLink(e.target.value)}
+                            disabled={savingEdit}
                             className="text-xs"
                           >
                             <option value="">ロードマップに紐づけない</option>
@@ -353,20 +385,40 @@ export function WeeklyTodoList({
                               </option>
                             ))}
                           </Select>
+                          <div>
+                            <Textarea
+                              aria-label="メモ(任意)"
+                              value={editingMemo}
+                              onChange={(e) => setEditingMemo(e.target.value.slice(0, MEMO_MAX_LENGTH))}
+                              placeholder="メモ(任意): 実行内容・気づき等"
+                              rows={3}
+                              maxLength={MEMO_MAX_LENGTH}
+                              disabled={savingEdit}
+                              className="max-h-40 overflow-y-auto text-xs"
+                            />
+                            <div className="mt-0.5 text-right text-[9px] text-slate-400">
+                              {editingMemo.length}/{MEMO_MAX_LENGTH}
+                            </div>
+                          </div>
                           <div className="flex gap-2">
-                            <Button type="button" variant="secondary" onClick={() => saveEdit(item)} className="flex-1">
-                              保存
+                            <Button type="button" variant="secondary" onClick={() => saveEdit(item)} disabled={savingEdit} className="flex-1">
+                              {savingEdit ? "保存中..." : "保存"}
                             </Button>
-                            <Button type="button" variant="secondary" onClick={() => setEditingId(null)} className="flex-1">
+                            <Button type="button" variant="secondary" onClick={() => cancelEdit(item)} disabled={savingEdit} className="flex-1">
                               キャンセル
                             </Button>
                           </div>
                         </div>
                       ) : (
                         <>
-                          <div className={`text-sm ${item.isDone ? "text-slate-400 line-through" : "text-slate-700"}`}>
+                          <div className={`break-words text-sm ${item.isDone ? "text-slate-400 line-through" : "text-slate-700"}`}>
                             {item.title}
                           </div>
+                          {item.memo && (
+                            <div className="mt-0.5 inline-flex items-center gap-1 text-[9px] text-slate-400">
+                              📝 メモあり
+                            </div>
+                          )}
                           {item.roadmapItem && (
                             <Link
                               href={`/roadmap/${item.roadmapItem.id}`}
@@ -394,6 +446,7 @@ export function WeeklyTodoList({
                                 setEditingId(item.id);
                                 setEditingText(item.title);
                                 setEditingLink(item.roadmapItemId ?? "");
+                                setEditingMemo(item.memo ?? "");
                               }}
                               className="text-[10px] text-emerald-600 hover:text-emerald-700"
                             >

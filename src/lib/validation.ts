@@ -119,6 +119,7 @@ export const weeklyTodoSchema = z.object({
   title: z.string().min(1),
   priority: z.enum(["HIGH", "MEDIUM", "LOW"]).default("MEDIUM"),
   isDone: z.coerce.boolean().default(false),
+  memo: z.string().max(2000).default(""),
   roadmapItemId: z.string().nullable().optional(),
   individualGoalId: z.string().nullable().optional(),
 });
@@ -129,6 +130,7 @@ export const weeklyTodoUpdateSchema = z.object({
   title: z.string().min(1).optional(),
   priority: z.enum(["HIGH", "MEDIUM", "LOW"]).optional(),
   isDone: z.coerce.boolean().optional(),
+  memo: z.string().max(2000).optional(),
   roadmapItemId: z.string().nullable().optional(),
   individualGoalId: z.string().nullable().optional(),
 });
