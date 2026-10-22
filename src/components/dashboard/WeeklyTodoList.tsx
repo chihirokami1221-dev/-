@@ -39,13 +39,13 @@ interface CategoryOption {
 }
 
 const DAYS = [
-  { key: "MON", label: "月" },
-  { key: "TUE", label: "火" },
-  { key: "WED", label: "水" },
-  { key: "THU", label: "木" },
-  { key: "FRI", label: "金" },
-  { key: "SAT", label: "土" },
-  { key: "SUN", label: "日" },
+  { key: "MON", shortLabel: "月" },
+  { key: "TUE", shortLabel: "火" },
+  { key: "WED", shortLabel: "水" },
+  { key: "THU", shortLabel: "木" },
+  { key: "FRI", shortLabel: "金" },
+  { key: "SAT", shortLabel: "土" },
+  { key: "SUN", shortLabel: "日" },
 ] as const;
 
 export function WeeklyTodoList({
@@ -86,15 +86,20 @@ export function WeeklyTodoList({
   }
 
   const weekLabel = getWeekLabel(new Date());
+  const weekStart = useMemo(() => getStartOfWeek(new Date()), []);
   const remaining = useMemo(() => items.filter((item) => !item.isDone).length, [items]);
 
   const grouped = useMemo(
     () =>
-      DAYS.map((day) => ({
-        ...day,
-        items: items.filter((item) => item.dayOfWeek === day.key),
-      })),
-    [items],
+      DAYS.map((day, index) => {
+        const date = new Date(weekStart.getTime() + index * 24 * 60 * 60 * 1000);
+        return {
+          ...day,
+          label: `${date.getMonth() + 1}/${date.getDate()}(${day.shortLabel})`,
+          items: items.filter((item) => item.dayOfWeek === day.key),
+        };
+      }),
+    [items, weekStart],
   );
 
   async function createItem(
@@ -374,25 +379,13 @@ export function WeeklyTodoList({
                               🔗 {item.roadmapItem.title}
                             </Link>
                           )}
-                          {item.individualGoal && (
-                            <Link
-                              href="/goals"
-                              className="mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
-                              style={{
-                                backgroundColor: `${categoryById.get(item.individualGoal.categoryId)?.color ?? "#94a3b8"}22`,
-                                color: categoryById.get(item.individualGoal.categoryId)?.color ?? "#64748b",
-                              }}
-                            >
-                              🎯 {item.individualGoal.title}
-                            </Link>
-                          )}
                           <Select
                             aria-label={`${item.title}の曜日を変更`}
                             value={item.dayOfWeek}
                             onChange={(e) => moveItemToDay(item.id, e.target.value as WeeklyTodoItem["dayOfWeek"])}
                             className="mt-2 md:hidden"
                           >
-                            {DAYS.map((day) => <option key={day.key} value={day.key}>{day.label}曜日へ移動</option>)}
+                            {DAYS.map((day) => <option key={day.key} value={day.key}>{day.shortLabel}曜日へ移動</option>)}
                           </Select>
                           <div className="mt-1 flex items-center justify-between gap-1">
                             <button
