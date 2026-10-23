@@ -80,6 +80,7 @@ export function WeeklyTodoList({
   const [editingLink, setEditingLink] = useState("");
   const [editingMemo, setEditingMemo] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [memoTooltipId, setMemoTooltipId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -425,11 +426,24 @@ export function WeeklyTodoList({
                             {item.title}
                           </div>
                           {item.memo && (
-                            <div
-                              className="mt-0.5 inline-flex cursor-help items-center gap-1 text-[9px] text-slate-400"
-                              title={item.memo}
-                            >
-                              📝 メモあり
+                            <div className="relative mt-0.5 inline-block">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMemoTooltipId((prev) => (prev === item.id ? null : item.id));
+                                }}
+                                onMouseEnter={() => setMemoTooltipId(item.id)}
+                                onMouseLeave={() => setMemoTooltipId((prev) => (prev === item.id ? null : prev))}
+                                className="inline-flex items-center gap-1 text-[9px] text-slate-400 hover:text-slate-600"
+                              >
+                                📝 メモあり
+                              </button>
+                              {memoTooltipId === item.id && (
+                                <div className="absolute left-0 top-full z-20 mt-1 w-48 whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-2 text-[10px] text-slate-700 shadow-lg">
+                                  {item.memo}
+                                </div>
+                              )}
                             </div>
                           )}
                           {item.roadmapItem && (
