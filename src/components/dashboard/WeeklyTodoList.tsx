@@ -400,13 +400,23 @@ export function WeeklyTodoList({
                               {editingMemo.length}/{MEMO_MAX_LENGTH}
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <Button type="button" variant="secondary" onClick={() => saveEdit(item)} disabled={savingEdit} className="flex-1">
-                              {savingEdit ? "保存中..." : "保存"}
-                            </Button>
-                            <Button type="button" variant="secondary" onClick={() => cancelEdit(item)} disabled={savingEdit} className="flex-1">
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => saveEdit(item)}
+                              disabled={savingEdit}
+                              className="flex-1 whitespace-nowrap rounded-lg bg-emerald-500 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
+                            >
+                              {savingEdit ? "保存中" : "保存"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => cancelEdit(item)}
+                              disabled={savingEdit}
+                              className="flex-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                            >
                               キャンセル
-                            </Button>
+                            </button>
                           </div>
                         </div>
                       ) : (
@@ -415,7 +425,10 @@ export function WeeklyTodoList({
                             {item.title}
                           </div>
                           {item.memo && (
-                            <div className="mt-0.5 inline-flex items-center gap-1 text-[9px] text-slate-400">
+                            <div
+                              className="mt-0.5 inline-flex cursor-help items-center gap-1 text-[9px] text-slate-400"
+                              title={item.memo}
+                            >
                               📝 メモあり
                             </div>
                           )}
