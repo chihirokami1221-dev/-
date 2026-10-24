@@ -23,6 +23,12 @@ export async function submitLogin(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
       signal: controller.signal,
+      // iOS SafariのPWA(ホーム画面に追加したアプリ)で、ログイン直後のCookieが保存されず
+      // ログアウト状態に戻ってしまう既知の不具合の軽減策として、キャッシュ経由の古い
+      // レスポンスを使わせない(cache: "no-store")。credentialsも明示し、Cookieの
+      // 送受信が確実に行われるようにする(同一オリジンではデフォルトでも送信されるが明示する)。
+      cache: "no-store",
+      credentials: "same-origin",
     });
 
     if (!res.ok) {
